@@ -1,15 +1,61 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  type User
+} from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 import { demoRequest } from "@/lib/content";
+import { auth, db, hasFirebaseConfig } from "@/lib/firebase";
 
 export function PortalClient() {
-  const [email, setEmail] = useState("client@example.com");
-  const [password, setPassword] = useState("demo-password");
-  const [signedIn, setSignedIn] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [user, setUser] = useState<User | null>(null);
+  const [mode, setMode] = useState<"sign-in" | "create">("sign-in");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
 
-  if (!signedIn) {
+  useEffect(() => {
+    if (!auth) return;
+    return onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
+  }, []);
+
+  async function handleAuth() {
+    setMessage("");
+    if (!hasFirebaseConfig || !auth || !db) {
+      setMessage("Firebase is not configured in this environment yet.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      if (mode === "create") {
+        const credential = await createUserWithEmailAndPassword(auth, email, password);
+        await setDoc(doc(db, "users", credential.user.uid), {
+          uid: credential.user.uid,
+          email: credential.user.email || email,
+          displayName: credential.user.email || email,
+          role: "client",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to sign in. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  if (!user) {
     return (
       <main className="page">
         <section className="hero">
@@ -17,11 +63,12 @@ export function PortalClient() {
             <div className="eyebrow">Client portal</div>
             <h1>Sign in to resume your QDRO or check status.</h1>
             <p className="lead">
-              Firebase Auth powers full client accounts. This local build uses a
-              demo sign-in until Firebase credentials are configured.
+              Use your client account to view request status, files, notes,
+              payment state, and signature progress.
             </p>
           </div>
           <form className="hero-panel">
+            <span className="status info">{mode === "sign-in" ? "Client sign in" : "Create account"}</span>
             <div className="field-grid one">
               <div className="field">
                 <label htmlFor="email">Email</label>
@@ -39,12 +86,26 @@ export function PortalClient() {
               </div>
             </div>
             <div className="toolbar">
-              <button className="button primary full" type="button" onClick={() => setSignedIn(true)}>
-                Sign in
+              <button className="button primary full" type="button" onClick={handleAuth} disabled={isSubmitting || !email || !password}>
+                {isSubmitting ? "Working..." : mode === "sign-in" ? "Sign in" : "Create account"}
               </button>
             </div>
+            {message && <p style={{ color: "var(--danger)" }}>{message}</p>}
             <p>
-              New here? <Link className="muted-link" href="/qdro-request">Start your QDRO request</Link>.
+              {mode === "sign-in" ? "New here?" : "Already have an account?"}{" "}
+              <button
+                className="button ghost"
+                type="button"
+                onClick={() => {
+                  setMode((current) => (current === "sign-in" ? "create" : "sign-in"));
+                  setMessage("");
+                }}
+              >
+                {mode === "sign-in" ? "Create an account" : "Sign in"}
+              </button>
+            </p>
+            <p>
+              Ready to begin? <Link className="muted-link" href="/qdro-request">Start your QDRO request</Link>.
             </p>
           </form>
         </section>
@@ -59,11 +120,19 @@ export function PortalClient() {
           <div>
             <div className="eyebrow">Client portal</div>
             <h1>Your QDRO request</h1>
-            <p className="lead">Track status, notes, files, payment, and signatures.</p>
+            <p className="lead">
+              Signed in as {user.email}. Track status, notes, files, payment,
+              and signatures.
+            </p>
           </div>
-          <Link className="button secondary" href="/qdro-request">
-            Start another request
-          </Link>
+          <div className="nav-actions">
+            <Link className="button secondary" href="/qdro-request">
+              Start another request
+            </Link>
+            <button className="button ghost" type="button" onClick={() => auth && signOut(auth)}>
+              Sign out
+            </button>
+          </div>
         </div>
 
         <div className="grid three">
