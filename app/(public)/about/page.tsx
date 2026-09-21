@@ -1,14 +1,21 @@
+import { UtahGraphic } from "@/components/UtahGraphic";
+
 export default function AboutPage() {
   return (
     <main className="page">
       <section className="section">
-        <div className="eyebrow">About UtahQDRO</div>
-        <h1>Focused help for a narrow, important legal step.</h1>
-        <p className="lead">
-          UtahQDRO helps individuals and attorneys navigate Qualified Domestic
-          Relations Orders with clear communication, efficient drafting, and
-          plan-specific attention.
-        </p>
+        <div className="intro-grid">
+          <div>
+            <div className="eyebrow">About UtahQDRO</div>
+            <h1>Focused help for a narrow, important legal step.</h1>
+            <p className="lead">
+              UtahQDRO helps individuals and attorneys navigate Qualified
+              Domestic Relations Orders with clear communication, efficient
+              drafting, and plan-specific attention.
+            </p>
+          </div>
+          <UtahGraphic variant="office" />
+        </div>
         <div className="grid two" style={{ marginTop: 28 }}>
           <article className="card">
             <h3>What we do</h3>

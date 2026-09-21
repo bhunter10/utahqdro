@@ -1,13 +1,21 @@
+import { UtahGraphic } from "@/components/UtahGraphic";
+
 export default function ContactPage() {
   return (
     <main className="page">
       <section className="section">
-        <div className="eyebrow">Contact</div>
-        <h1>Send us a question.</h1>
-        <p className="lead">
-          Use this form for general questions. If you are ready to begin a QDRO,
-          use the guided request flow so your information is saved securely.
-        </p>
+        <div className="intro-grid">
+          <div>
+            <div className="eyebrow">Contact</div>
+            <h1>Send us a question.</h1>
+            <p className="lead">
+              Use this form for general questions. If you are ready to begin a
+              QDRO, use the guided request flow so your information is saved
+              securely.
+            </p>
+          </div>
+          <UtahGraphic variant="office" />
+        </div>
         <div className="grid two" style={{ marginTop: 28 }}>
           <form className="panel">
             <div className="field-grid">

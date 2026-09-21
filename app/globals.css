@@ -225,6 +225,31 @@ p {
   padding: 24px;
 }
 
+.graphic-panel {
+  position: relative;
+  min-height: 340px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #eaf2fa;
+  box-shadow: var(--shadow);
+}
+
+.graphic-panel.compact {
+  min-height: 260px;
+}
+
+.graphic-image {
+  object-fit: cover;
+}
+
+.intro-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.9fr);
+  gap: 34px;
+  align-items: center;
+}
+
 .checklist {
   display: grid;
   gap: 12px;
@@ -591,6 +616,7 @@ th {
   }
 
   .hero,
+  .intro-grid,
   .form-layout,
   .footer-inner,
   .grid.three,
@@ -631,6 +657,10 @@ th {
   .hero-panel,
   .band {
     padding: 18px;
+  }
+
+  .graphic-panel {
+    min-height: 240px;
   }
 
   .choice-row {

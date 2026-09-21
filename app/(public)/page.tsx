@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { UtahGraphic } from "@/components/UtahGraphic";
 
 const steps = [
   ["1", "Provide basic information", "Upload your decree, retirement statement, and the case details needed to prepare the order."],
@@ -28,21 +29,24 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
-        <div className="hero-panel">
-          <span className="status info">Flat fee: $550 per QDRO</span>
-          <h2 style={{ marginTop: 18 }}>A clearer path from intake to filing</h2>
-          <div className="checklist">
-            {[
-              "Guided questions with save and resume",
-              "Secure uploads for decree and account statements",
-              "Admin document preview before final processing",
-              "Status updates visible to clients"
-            ].map((item) => (
-              <div className="mini-check" key={item}>
-                <span className="icon">✓</span>
-                <strong>{item}</strong>
-              </div>
-            ))}
+        <div>
+          <UtahGraphic variant="hero" priority />
+          <div className="hero-panel" style={{ marginTop: 18 }}>
+            <span className="status info">Flat fee: $550 per QDRO</span>
+            <h2 style={{ marginTop: 18 }}>A clearer path from intake to filing</h2>
+            <div className="checklist">
+              {[
+                "Guided questions with save and resume",
+                "Secure uploads for decree and account statements",
+                "Admin document preview before final processing",
+                "Status updates visible to clients"
+              ].map((item) => (
+                <div className="mini-check" key={item}>
+                  <span className="icon">✓</span>
+                  <strong>{item}</strong>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
