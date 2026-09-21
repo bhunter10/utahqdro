@@ -1,0 +1,32 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == "admin";
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/requests/{requestId}/{fileName} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow create: if isOwner(userId)
+        && request.resource.size < 20 * 1024 * 1024
+        && request.resource.contentType.matches("(application/pdf|image/.*|application/vnd.openxmlformats-officedocument.wordprocessingml.document|application/msword)");
+      allow update, delete: if isAdmin();
+    }
+
+    match /generated/{requestId}/{fileName} {
+      allow read, write: if isAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

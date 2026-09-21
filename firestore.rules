@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == "admin";
+    }
+
+    function isOwner(ownerUid) {
+      return isSignedIn() && request.auth.uid == ownerUid;
+    }
+
+    function validRequest(data) {
+      return data.keys().hasAll(["ownerUid", "status", "paymentState", "signatureState", "fields", "createdAt", "updatedAt"])
+        && data.ownerUid is string
+        && data.status in [
+          "Draft", "Submitted", "Payment Pending", "Paid", "In Review",
+          "Needs Client Info", "Draft Prepared", "Sent for Signature",
+          "Filed with Court", "Sent to Plan Administrator", "Completed", "Cancelled"
+        ]
+        && data.paymentState in ["unpaid", "pending", "paid", "waived"]
+        && data.signatureState in ["not_started", "sent", "partially_signed", "completed"]
+        && data.fields is map;
+    }
+
+    function validUser(data) {
+      return data.keys().hasOnly(["uid", "email", "displayName", "role", "createdAt", "updatedAt"])
+        && data.uid is string
+        && data.email is string
+        && data.displayName is string
+        && data.role in ["client", "admin"];
+    }
+
+    match /users/{userId} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow create: if isOwner(userId) && validUser(request.resource.data) && request.resource.data.role == "client";
+      allow update: if (isOwner(userId) && validUser(request.resource.data) && resource.data.role == request.resource.data.role)
+        || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /requests/{requestId} {
+      allow read: if isAdmin() || isOwner(resource.data.ownerUid);
+      allow create: if isSignedIn()
+        && validRequest(request.resource.data)
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if (isOwner(resource.data.ownerUid)
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && validRequest(request.resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["fields", "files", "updatedAt", "status"]))
+        || (isAdmin() && validRequest(request.resource.data));
+      allow delete: if isAdmin();
+    }
+
+    match /requestFiles/{fileId} {
+      allow read: if isAdmin() || isOwner(resource.data.ownerUid);
+      allow create, update: if isSignedIn() && (isAdmin() || request.resource.data.ownerUid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /notes/{noteId} {
+      allow read: if isAdmin() || (isOwner(resource.data.ownerUid) && resource.data.visibility == "client");
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /formSchemas/{schemaId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /documentTemplates/{templateId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /auditLog/{entryId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
