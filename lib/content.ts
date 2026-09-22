@@ -1,4 +1,6 @@
+import { fidelityHtmlTemplate, fidelityMergeFields } from "./templates/fidelity";
 import type { DocumentTemplate, IntakeStep, QdroRequest, RequestStatus } from "./types";
+import { utahCourtOptions } from "./utah-courts";
 
 export const navigation = [
   { label: "About", href: "/about" },
@@ -36,11 +38,11 @@ export const intakeSteps: IntakeStep[] = [
         placeholder: "Example: 234400123"
       },
       {
-        id: "court_county",
-        label: "County",
+        id: "court_location",
+        label: "Which court was your case assigned to?",
         type: "select",
         required: true,
-        options: ["I don't know", "Utah", "Salt Lake", "Davis", "Weber", "Washington", "Cache", "Tooele", "Other"]
+        options: ["I don't know", ...utahCourtOptions]
       },
       {
         id: "judge_name",
@@ -182,28 +184,9 @@ export const documentTemplates: DocumentTemplate[] = [
     version: 1,
     active: true,
     description: "Defined contribution order for Fidelity-administered plans.",
-    body: `IN THE DISTRICT COURT OF {{court_county}} COUNTY, STATE OF UTAH
-
-QUALIFIED DOMESTIC RELATIONS ORDER
-
-Case No. {{case_number}}
-
-This Order assigns a portion of benefits in {{formal_plan_name}} from {{participant_name}} ("Participant") to {{alternate_payee_name}} ("Alternate Payee").
-
-The Alternate Payee is awarded {{award_text}} as of {{valuation_date}}. The parties acknowledge that this order is intended to satisfy the requirements for a Qualified Domestic Relations Order.
-
-Participant information:
-{{participant_name}}
-SSN: {{participant_ssn}}
-DOB: {{participant_dob}}
-
-Alternate Payee information:
-{{alternate_payee_name}}
-SSN: {{alternate_payee_ssn}}
-DOB: {{alternate_payee_dob}}
-
-Judge: {{judge_name}}
-Signed decree date: {{divorce_date}}`
+    format: "html",
+    htmlBody: fidelityHtmlTemplate,
+    mergeFields: fidelityMergeFields
   },
   {
     id: "general-v1",
@@ -212,6 +195,16 @@ Signed decree date: {{divorce_date}}`
     version: 1,
     active: true,
     description: "General starter order for plan-specific admin review.",
+    format: "plain",
+    mergeFields: [
+      "case_number",
+      "formal_plan_name",
+      "participant_name",
+      "alternate_payee_name",
+      "award_text",
+      "valuation_date",
+      "special_terms"
+    ],
     body: `QUALIFIED DOMESTIC RELATIONS ORDER
 
 Case No. {{case_number}}
@@ -244,20 +237,31 @@ export const demoRequest: QdroRequest = {
   updatedAt: "2026-09-21T09:30:00.000Z",
   fields: {
     case_number: "234400123",
+    court_location: "Provo",
     court_county: "Utah",
+    district: "Fourth",
     judge_name: "Hon. Sample Judge",
+    marriage_date: "2012-06-02",
     divorce_date: "2026-08-12",
     party1_name: "Jordan Client",
     party1_email: "client@example.com",
+    party1_phone: "801-555-0100",
+    party1_address: "1145 S 800 E, Orem, UT 84097",
     party1_ssn: "111-22-3333",
     party1_dob: "1983-04-15",
     party2_name: "Taylor Former",
     party2_email: "other@example.com",
+    party2_phone: "801-555-0188",
+    party2_address: "3915 Timpview Dr., Provo, UT 84604",
     party2_ssn: "444-55-6666",
     party2_dob: "1981-02-20",
     account_owner: "Party 1",
     plan_family: "Fidelity",
+    entity_name: "Acme Industries",
+    account_type: "401(k)",
+    employer_name: "Acme Industries",
     formal_plan_name: "Acme Industries 401(k) Plan",
+    market_adjustment: "Yes",
     is_ira: "No",
     division_type: "Percentage",
     percent_award: "50",

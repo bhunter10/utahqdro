@@ -90,7 +90,10 @@ export type DocumentTemplate = {
   family: string;
   version: number;
   description: string;
-  body: string;
+  format?: "plain" | "html";
+  body?: string;
+  htmlBody?: string;
+  mergeFields?: string[];
   active: boolean;
 };
 

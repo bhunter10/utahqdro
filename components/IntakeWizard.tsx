@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { demoRequest, intakeSteps } from "@/lib/content";
 import type { IntakeField, QdroRequest } from "@/lib/types";
+import { findUtahCourt } from "@/lib/utah-courts";
 import { SignaturePad } from "./SignaturePad";
 
 const readinessChecks = [
@@ -94,7 +95,19 @@ export function IntakeWizard() {
   }, [data, submitted]);
 
   function updateField(id: string, value: string | boolean) {
-    setData((current) => ({ ...current, [id]: value }));
+    setData((current) => {
+      if (id !== "court_location" || typeof value !== "string") {
+        return { ...current, [id]: value };
+      }
+
+      const court = findUtahCourt(value);
+      return {
+        ...current,
+        [id]: value,
+        court_county: court?.county || "",
+        district: court?.district || ""
+      };
+    });
   }
 
   async function beginCheckout() {
