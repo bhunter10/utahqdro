@@ -1,21 +1,20 @@
-import { UtahGraphic } from "@/components/UtahGraphic";
+import { HeroBackdrop } from "@/components/HeroBackdrop";
 
 export default function AboutPage() {
   return (
-    <main className="page">
+    <main className="page compact-hero-page">
+      <HeroBackdrop
+        variant="office"
+        eyebrow="About UtahQDRO"
+        title="Focused help for a narrow, important legal step."
+      >
+        <p>
+          UtahQDRO helps individuals and attorneys navigate Qualified Domestic
+          Relations Orders with clear communication, efficient drafting, and
+          plan-specific attention.
+        </p>
+      </HeroBackdrop>
       <section className="section">
-        <div className="intro-grid">
-          <div>
-            <div className="eyebrow">About UtahQDRO</div>
-            <h1>Focused help for a narrow, important legal step.</h1>
-            <p className="lead">
-              UtahQDRO helps individuals and attorneys navigate Qualified
-              Domestic Relations Orders with clear communication, efficient
-              drafting, and plan-specific attention.
-            </p>
-          </div>
-          <UtahGraphic variant="office" />
-        </div>
         <div className="grid two" style={{ marginTop: 28 }}>
           <article className="card">
             <h3>What we do</h3>

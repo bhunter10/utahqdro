@@ -6,8 +6,14 @@ export function SiteFooter() {
       <div className="footer-inner">
         <div>
           <div className="brand">
-            <span className="brand-mark">QD</span>
-            <span>UtahQDRO.com</span>
+            <img
+              className="brand-mark"
+              src="/utahqdro-mark.png?v=2"
+              alt=""
+              width={56}
+              height={56}
+            />
+            <span>UtahQDRO</span>
           </div>
           <p>
             UtahQDRO prepares accurate, court-ready retirement division orders for

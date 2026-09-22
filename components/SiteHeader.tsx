@@ -6,8 +6,14 @@ export function SiteHeader() {
     <header className="topbar">
       <nav className="nav" aria-label="Main navigation">
         <Link className="brand" href="/">
-          <span className="brand-mark">QD</span>
-          <span>UtahQDRO.com</span>
+          <img
+            className="brand-mark"
+            src="/utahqdro-mark.png?v=2"
+            alt=""
+            width={56}
+            height={56}
+          />
+          <span>UtahQDRO</span>
         </Link>
         <div className="nav-links">
           {navigation.map((item) => (

@@ -1,69 +1,79 @@
 import Link from "next/link";
-import { UtahGraphic } from "@/components/UtahGraphic";
+import { HeroBackdrop } from "@/components/HeroBackdrop";
 
 const steps = [
-  ["1", "Provide basic information", "Upload your decree, retirement statement, and the case details needed to prepare the order."],
-  ["2", "Review your intake", "Your answers are checked for missing items before the admin reviews the generated documents."],
-  ["3", "Sign and pay", "Sign the request on the page and pay the flat fee online."],
-  ["4", "Track the process", "Follow court and plan-administrator status updates from your client portal."]
+  [
+    "1",
+    "Provide Basic Information",
+    "You upload your decree, your retirement statement, and a few details about your case and yourselves. You can make your payment online too. Simple, clear, and designed to get it done right the first time."
+  ],
+  [
+    "2",
+    "QDRO Drafting",
+    "We prepare your QDRO based on your specific plan and divorce terms. Don’t worry, after our attorney reviews it, you can review it before we send to court."
+  ],
+  [
+    "3",
+    "Review, Approval, and Signatures",
+    "After both parties approve the QDRO, we will send it to the judge for you for signature and certification. Then we send the QDRO to the plan administrator."
+  ],
+  [
+    "4",
+    "Sent to Plan Admin for Division",
+    "We handle the drafting process from start to finish so you can move forward without confusion or unnecessary back-and-forth."
+  ]
 ];
 
 export default function HomePage() {
   return (
     <main className="page">
-      <section className="hero">
-        <div>
-          <div className="eyebrow">Utah QDRO preparation</div>
-          <h1>Need a QDRO? We’ll handle the details.</h1>
-          <p className="lead">
-            If your attorney or divorce decree says you need a QDRO, this guided
-            portal helps you provide the right information, sign electronically,
-            pay securely, and track each step.
-          </p>
-          <div className="hero-actions">
+      <HeroBackdrop
+        variant="hero"
+        eyebrow="Utah QDRO preparation"
+        title="Need a QDRO? We’ll handle the details."
+        actions={
+          <>
             <Link className="button primary" href="/qdro-request">
               Start Your QDRO
             </Link>
             <Link className="button secondary" href="/faqs">
               Read FAQs
             </Link>
+          </>
+        }
+      >
+          <p className="lead">
+            If your attorney or divorce decree says you need a QDRO, this guided
+            portal helps you provide the right information, sign electronically,
+            pay securely, and track each step.
+          </p>
+          <div className="hero-points">
+            {[
+              "Quick turn around times",
+              "Secure uploads",
+              "We prepare based on your specific divorce terms",
+              "We send it to the judge and plan administrator"
+            ].map((item) => (
+              <div className="hero-point" key={item}>
+                <span className="icon">✓</span>
+                <span>{item}</span>
+              </div>
+            ))}
           </div>
-        </div>
-        <div>
-          <UtahGraphic variant="hero" priority />
-          <div className="hero-panel" style={{ marginTop: 18 }}>
-            <span className="status info">Flat fee: $550 per QDRO</span>
-            <h2 style={{ marginTop: 18 }}>A clearer path from intake to filing</h2>
-            <div className="checklist">
-              {[
-                "Guided questions with save and resume",
-                "Secure uploads for decree and account statements",
-                "Admin document preview before final processing",
-                "Status updates visible to clients"
-              ].map((item) => (
-                <div className="mini-check" key={item}>
-                  <span className="icon">✓</span>
-                  <strong>{item}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+      </HeroBackdrop>
 
       <section className="section">
         <div className="section-head">
           <div>
             <div className="eyebrow">How it works</div>
-            <h2>Simple for clients, structured for accurate drafting.</h2>
+            <h2>From upload to plan division, we handle the process.</h2>
           </div>
           <p>
-            The new request flow keeps the legal logic behind the scenes while
-            giving clients clear steps, plain-language help, and safe ways to say
-            “I don’t know.”
+            You provide the basics. We draft, review, and move your QDRO through
+            court and the plan administrator so you can keep things moving.
           </p>
         </div>
-        <div className="grid four grid three">
+        <div className="grid two">
           {steps.map(([number, title, body]) => (
             <article className="card" key={title}>
               <div className="step-number">{number}</div>
