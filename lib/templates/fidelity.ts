@@ -49,7 +49,7 @@ export const fidelityHtmlTemplate = `
     </tbody>
   </table>
 
-  <table style="width: 100%; border-collapse: collapse; table-layout: fixed; border-left: none; border-right: none; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
+  <table style="width: 100%; border-collapse: collapse; table-layout: fixed; border-left: none; border-right: none; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
     <colgroup>
       <col style="width: 50%;" />
       <col style="width: 50%;" />
@@ -71,7 +71,7 @@ export const fidelityHtmlTemplate = `
             </tbody>
           </table>
         </td>
-        <td style="width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: none; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+        <td style="padding-bottom:12pt; width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: none; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
           <table cellpadding="0" cellspacing="0" style="width: 100%; padding-left:12pt; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
             <tbody>
               <tr>

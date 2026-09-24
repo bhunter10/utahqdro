@@ -1,10 +1,14 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
-export function getAdminDb() {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+function initializeAdminApp() {
+  const projectId =
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
+    process.env.GOOGLE_CLOUD_PROJECT;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = (process.env.FIREBASE_PRIVATE_KEY || process.env.GOOGLE_PRIVATE_KEY)?.replace(/\\n/g, "\n");
 
   if (!projectId || !clientEmail || !privateKey) {
     return null;
@@ -20,5 +24,19 @@ export function getAdminDb() {
     });
   }
 
+  return getApps()[0];
+}
+
+export function getAdminDb() {
+  const app = initializeAdminApp();
+  if (!app) return null;
+
   return getFirestore();
+}
+
+export function getAdminAuth() {
+  const app = initializeAdminApp();
+  if (!app) return null;
+
+  return getAuth(app);
 }

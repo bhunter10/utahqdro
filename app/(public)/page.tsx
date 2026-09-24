@@ -93,9 +93,8 @@ export default function HomePage() {
             <h2>A rejected QDRO can delay division for months.</h2>
           </div>
           <p>
-            QDROs must match court terms and plan requirements. The portal is
-            designed to reduce incomplete answers, missing uploads, and avoidable
-            back-and-forth before drafting begins.
+            We handle the details for you, from gathering the right information
+            to preparing the order for court and plan review.
           </p>
         </div>
       </section>

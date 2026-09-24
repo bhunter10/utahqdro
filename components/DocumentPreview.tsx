@@ -2,37 +2,20 @@
 
 import { useMemo, useState } from "react";
 import { renderDocumentHtml } from "@/lib/document-engine";
-import type { QdroRequest } from "@/lib/types";
+import type { DocumentTemplate, QdroRequest } from "@/lib/types";
 
-export function DocumentPreview({ request }: { request: QdroRequest }) {
+export function DocumentPreview({
+  request,
+  templates
+}: {
+  request: QdroRequest;
+  templates?: DocumentTemplate[];
+}) {
   const [googleDocStatus, setGoogleDocStatus] = useState("");
   const [googleDocUrl, setGoogleDocUrl] = useState("");
   const [needsGoogleConnection, setNeedsGoogleConnection] = useState(false);
   const [isCreatingGoogleDoc, setIsCreatingGoogleDoc] = useState(false);
-  const html = useMemo(() => renderDocumentHtml(request), [request]);
-
-  function printPreview() {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-    const printableHtml = `
-      <!doctype html>
-      <html>
-        <head>
-          <title>${request.id} preview</title>
-          <style>
-            body { margin: 0; padding: 0.75in; }
-          </style>
-        </head>
-        <body>${html}</body>
-      </html>`;
-    printWindow.document.open();
-    printWindow.document.write(printableHtml);
-    printWindow.document.close();
-    window.setTimeout(() => {
-      printWindow.focus();
-      printWindow.print();
-    }, 250);
-  }
+  const html = useMemo(() => renderDocumentHtml(request, false, { includeTemplateLabel: false, templates }), [request, templates]);
 
   async function createGoogleDoc() {
     setIsCreatingGoogleDoc(true);
@@ -60,28 +43,6 @@ export function DocumentPreview({ request }: { request: QdroRequest }) {
     }
   }
 
-  async function downloadGoogleExportHtml() {
-    const response = await fetch("/api/documents/export", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ format: "google-html-debug", request })
-    });
-    if (!response.ok) {
-      setGoogleDocStatus("Could not create the Google export debug HTML.");
-      return;
-    }
-
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${request.id || "qdro"}-google-export-debug.html`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-  }
-
   return (
     <section className="panel">
       <div className="section-head">
@@ -96,19 +57,13 @@ export function DocumentPreview({ request }: { request: QdroRequest }) {
           )}
         </div>
         <div className="preview-actions">
-          <button className="button secondary" type="button" onClick={printPreview}>
-            Print
-          </button>
-          <button className="button secondary" type="button" onClick={downloadGoogleExportHtml}>
-            Download Google HTML
-          </button>
           {needsGoogleConnection && (
             <a className="button secondary" href="/api/google/oauth/start" target="_blank">
               Connect Google Drive
             </a>
           )}
           <button className="button secondary" type="button" onClick={createGoogleDoc} disabled={isCreatingGoogleDoc}>
-            {isCreatingGoogleDoc ? "Creating..." : "Create Google Doc"}
+            {isCreatingGoogleDoc ? "Generating..." : "Generate Google Doc"}
           </button>
         </div>
       </div>

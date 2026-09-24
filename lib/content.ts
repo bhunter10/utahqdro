@@ -335,22 +335,46 @@ export const sampleRequests: QdroRequest[] = [
 export const faqs = [
   {
     q: "What is a QDRO?",
-    a: "A Qualified Domestic Relations Order is a court order that allows certain retirement benefits to be divided after divorce."
+    a: "A Qualified Domestic Relations Order is a court order that lets certain retirement benefits be divided after divorce and assigned to a former spouse without triggering avoidable tax penalties."
   },
   {
-    q: "How much does it cost?",
-    a: "The flat fee is $550 per QDRO for uncontested matters, including drafting, signatures, court submission, and sending the certified order to the plan administrator."
+    q: "Do I need a QDRO for my divorce?",
+    a: "If your divorce divides a 401(k), pension, or another employer-sponsored retirement plan, you will usually need a QDRO so the plan can legally recognize and process the division."
   },
   {
-    q: "How long does the process take?",
-    a: "Many QDROs take 4-10 weeks. UtahQDRO prepares and submits the order quickly, but courts and plan administrators can affect the timeline."
+    q: "Do IRAs need a QDRO to divide the funds?",
+    a: "Often no. Many IRA custodians will divide an IRA with the divorce decree alone, but some may ask for a QDRO. Check with the financial institution first; if they require one, UtahQDRO can help."
   },
   {
-    q: "Do IRAs need a QDRO?",
-    a: "Usually no. Some IRA administrators occasionally ask for one, so the intake flow asks you to confirm before proceeding."
+    q: "How long does it take to get a QDRO?",
+    a: "Timelines vary, but one to three months is common. UtahQDRO drafts and submits quickly, while court signature timing and plan administrator review can make some orders faster or slower."
   },
   {
-    q: "Can I start if I do not know every answer?",
-    a: "Yes. The new intake includes I don't know options so your request can be flagged for review instead of forcing a guess."
+    q: "How much does it cost to prepare a QDRO?",
+    a: "The flat fee is $550 for each uncontested QDRO. That includes drafting, sending for signatures, submitting to the court, and sending the order to the plan administrator. Contested matters must be resolved by the parties, attorneys, or court first."
+  },
+  {
+    q: "Can I prepare a QDRO myself?",
+    a: "It is possible, but QDROs must satisfy federal law and the retirement plan's own requirements. Mistakes can delay the division or cause financial problems, so professional preparation is usually recommended."
+  },
+  {
+    q: "What types of retirement plans require a QDRO?",
+    a: "QDROs are commonly used for employer-sponsored plans such as 401(k)s, pensions, retirement annuities, TSP, FERS, and other qualified profit-sharing plans. IRAs usually follow different rules."
+  },
+  {
+    q: "What happens if a QDRO is not filed?",
+    a: "Without an approved QDRO, the retirement account generally stays under the participant's control and the former spouse may not receive the share awarded in the decree. That can create disputes later."
+  },
+  {
+    q: "Do both parties need to agree on a QDRO?",
+    a: "Usually yes. The parties, or their attorneys, typically need to agree on the QDRO terms before it is submitted to the court for approval."
+  },
+  {
+    q: "Can a QDRO be modified after it's approved?",
+    a: "Sometimes. A correction or amendment may be needed if the plan administrator rejects the order because something like the plan name, loan treatment, or division language needs adjustment. Court approval is usually required."
+  },
+  {
+    q: "How do I get started with my QDRO?",
+    a: "Start the online request, then UtahQDRO will review your divorce decree and retirement account statement so the QDRO can be prepared and submitted efficiently."
   }
 ];

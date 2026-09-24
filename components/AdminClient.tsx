@@ -1,18 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { documentTemplates, intakeSteps, sampleRequests, statuses } from "@/lib/content";
-import type { IntakeField, QdroRequest, RequestStatus } from "@/lib/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { intakeSteps, sampleRequests, statuses } from "@/lib/content";
+import { getEditableTemplateBody } from "@/lib/document-engine";
+import { auth, missingFirebaseConfig } from "@/lib/firebase";
+import type { DocumentTemplate, IntakeField, QdroRequest, RequestStatus } from "@/lib/types";
 import { findUtahCourt } from "@/lib/utah-courts";
 import { DocumentPreview } from "./DocumentPreview";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 
 const derivedRequestFieldIds = new Set(["court_county", "district"]);
+type AdminTab = "requests" | "fields" | "templates";
 
-export function AdminClient() {
+export function AdminClient({ initialTab = "requests", mode = "workspace" }: { initialTab?: AdminTab; mode?: "login" | "workspace" }) {
+  const router = useRouter();
+  const isLoginScreen = mode === "login";
   const [requests, setRequests] = useState(sampleRequests);
+  const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
+  const [adminUser, setAdminUser] = useState<User | null>(null);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminAuthMessage, setAdminAuthMessage] = useState("");
+  const [isAdminAuthSubmitting, setIsAdminAuthSubmitting] = useState(false);
+  const [templateStatus, setTemplateStatus] = useState("");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"requests" | "fields" | "templates">("requests");
+  const [tab, setTab] = useState<AdminTab>(initialTab);
 
   const filtered = useMemo(() => {
     const normalized = query.toLowerCase();
@@ -26,6 +40,86 @@ export function AdminClient() {
   }, [query, requests]);
 
   const selected = requests.find((request) => request.id === selectedId) || null;
+
+  useEffect(() => {
+    if (!auth) {
+      setTemplateStatus(`Firebase is not configured. Missing: ${missingFirebaseConfig.join(", ")}.`);
+      return;
+    }
+
+    return onAuthStateChanged(auth, (user) => {
+      setAdminUser(user);
+      if (user) {
+        if (isLoginScreen) {
+          router.replace("/admin/requests");
+          return;
+        }
+        void loadTemplates();
+      } else {
+        setTemplateStatus("Sign in as an admin to load and save database templates.");
+        if (!isLoginScreen) {
+          router.replace("/admin");
+        }
+      }
+    });
+  }, [isLoginScreen, router]);
+
+  async function handleAdminSignIn() {
+    setAdminAuthMessage("");
+    if (!auth) {
+      setAdminAuthMessage(`Firebase is not configured. Missing: ${missingFirebaseConfig.join(", ")}.`);
+      return;
+    }
+
+    try {
+      setIsAdminAuthSubmitting(true);
+      await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+      setAdminPassword("");
+      setAdminAuthMessage("Signed in. Opening admin requests...");
+      router.replace("/admin/requests");
+    } catch (error) {
+      setAdminAuthMessage(getFirebaseAuthMessage(error));
+    } finally {
+      setIsAdminAuthSubmitting(false);
+    }
+  }
+
+  async function handleAdminSignOut() {
+    if (!auth) return;
+    await signOut(auth);
+    setAdminAuthMessage("Signed out.");
+    router.replace("/admin");
+  }
+
+  async function getAdminToken() {
+    const user = auth?.currentUser;
+    if (!user) return "";
+    return user.getIdToken();
+  }
+
+  async function loadTemplates() {
+    setTemplates([]);
+    const token = await getAdminToken();
+    if (!token) {
+      setTemplateStatus("Sign in as an admin to load and save database templates.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/templates", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const result = (await response.json()) as { message?: string; templates?: DocumentTemplate[] };
+      if (!response.ok) {
+        setTemplateStatus(result.message || "Could not load database templates.");
+        return;
+      }
+      setTemplates(result.templates || []);
+      setTemplateStatus(result.message || "Database templates loaded.");
+    } catch {
+      setTemplateStatus("Could not load database templates.");
+    }
+  }
 
   function updateStatus(requestId: string, status: RequestStatus) {
     setRequests((current) =>
@@ -55,26 +149,136 @@ export function AdminClient() {
     );
   }
 
+  function updateInternalNotes(requestId: string, body: string) {
+    setRequests((current) =>
+      current.map((request) =>
+        request.id === requestId
+          ? {
+              ...request,
+              notes: getUpdatedInternalNotes(request.notes, body),
+              updatedAt: new Date().toISOString()
+            }
+          : request
+      )
+    );
+  }
+
+  function navigateToTab(nextTab: AdminTab) {
+    setTab(nextTab);
+    router.push(`/admin/${nextTab}`);
+  }
+
+  async function saveTemplateChanges(templateId: string, htmlBody: string) {
+    const token = await getAdminToken();
+    if (!token) {
+      throw new Error("Sign in as an admin to save database templates.");
+    }
+
+    const response = await fetch("/api/admin/templates", {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ templateId, htmlBody })
+    });
+    const result = (await response.json()) as { message?: string; template?: DocumentTemplate };
+    if (!response.ok || !result.template) {
+      throw new Error(result.message || "Could not save template changes.");
+    }
+
+    setTemplates((currentTemplates) =>
+      currentTemplates.map((template) => (template.id === templateId ? result.template as DocumentTemplate : template))
+    );
+    setTemplateStatus(result.message || "Template changes saved.");
+  }
+
   return (
-    <main className="page">
-      <section className="section admin-shell">
-        <div className="section-head">
+    <>
+      {!isLoginScreen && (
+        <section className="admin-auth-panel">
+          <div>
+            <span className={`status ${adminUser ? "info" : "warn"}`}>{adminUser ? "Admin signed in" : "Checking admin"}</span>
+            <p>{adminUser ? `Signed in as ${adminUser.email || adminUser.uid}.` : "Checking admin access..."}</p>
+          </div>
+          {adminUser && (
+            <div className="toolbar" style={{ marginTop: 0 }}>
+              <button className="button secondary" type="button" onClick={() => void handleAdminSignOut()}>
+                Sign out
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {isLoginScreen ? (
+        <main className="admin-login-page">
+          <section className="admin-login-screen">
+            <div className="admin-login-copy">
+              <div className="eyebrow">Admin</div>
+              <h1>Admin login</h1>
+              <p className="lead">Sign in to manage client requests, statuses, internal notes, and document templates.</p>
+            </div>
+            <section className="panel admin-login-card" aria-labelledby="admin-login-title">
+              <div>
+                <span className="status info">Secure access</span>
+                <h2 id="admin-login-title">Sign in</h2>
+                <p>Use your admin account to continue.</p>
+              </div>
+              <div className="admin-login-fields">
+                <div className="field">
+                  <label htmlFor="admin-email">Email</label>
+                  <input
+                    className="input"
+                    id="admin-email"
+                    type="email"
+                    value={adminEmail}
+                    onChange={(event) => setAdminEmail(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="admin-password">Password</label>
+                  <input
+                    className="input"
+                    id="admin-password"
+                    type="password"
+                    value={adminPassword}
+                    onChange={(event) => setAdminPassword(event.target.value)}
+                  />
+                </div>
+                <button
+                  className="button primary full"
+                  type="button"
+                  onClick={() => void handleAdminSignIn()}
+                  disabled={isAdminAuthSubmitting || !adminEmail || !adminPassword}
+                >
+                  {isAdminAuthSubmitting ? "Signing in..." : "Sign in"}
+                </button>
+              </div>
+              {adminAuthMessage && <p className="template-save-status">{adminAuthMessage}</p>}
+            </section>
+          </section>
+        </main>
+      ) : (
+      <main className="page">
+        <section className="section admin-shell">
+          <div className="section-head">
           <div>
             <div className="eyebrow">Admin</div>
             <h1>Requests, fields, notes, statuses, and templates.</h1>
             <p className="lead">
               Work from the client list first, then open each request to review
-              fields, notes, files, status, and the generated document preview.
+              fields, internal notes, status, and the generated document preview.
             </p>
           </div>
           <div className="nav-actions">
-            <button className={`button ${tab === "requests" ? "primary" : "secondary"}`} onClick={() => setTab("requests")} type="button">
+            <button className={`button ${tab === "requests" ? "primary" : "secondary"}`} onClick={() => navigateToTab("requests")} type="button">
               Requests
             </button>
-            <button className={`button ${tab === "fields" ? "primary" : "secondary"}`} onClick={() => setTab("fields")} type="button">
+            <button className={`button ${tab === "fields" ? "primary" : "secondary"}`} onClick={() => navigateToTab("fields")} type="button">
               Fields
             </button>
-            <button className={`button ${tab === "templates" ? "primary" : "secondary"}`} onClick={() => setTab("templates")} type="button">
+            <button className={`button ${tab === "templates" ? "primary" : "secondary"}`} onClick={() => navigateToTab("templates")} type="button">
               Templates
             </button>
           </div>
@@ -187,13 +391,14 @@ export function AdminClient() {
                 <span className="status info">Document templates</span>
                 <h2 style={{ marginTop: 12 }}>Versioned template library</h2>
                 <p>Template families can be expanded from the legacy PHP files into merge-field based documents.</p>
+                {templateStatus && <p className="template-save-status">{templateStatus}</p>}
               </div>
               <button className="button secondary" type="button">
                 Add template version
               </button>
             </div>
             <div className="grid two">
-              {documentTemplates.map((template) => (
+              {templates.map((template) => (
                 <article className="card template-config-card" key={template.id}>
                   <div className="toolbar" style={{ marginTop: 0 }}>
                     <span className="status">{template.active ? "active" : "inactive"}</span>
@@ -202,19 +407,7 @@ export function AdminClient() {
                   <h3 style={{ marginTop: 12 }}>{template.name}</h3>
                   <p>{template.description}</p>
                   <small>Family: {template.family} · Version {template.version}</small>
-                  <div className="template-merge-list">
-                    {(template.mergeFields || []).map((field) => (
-                      <code key={field}>{"{{"}{field}{"}}"}</code>
-                    ))}
-                  </div>
-                  <div className="field" style={{ marginTop: 16 }}>
-                    <label htmlFor={`${template.id}-body`}>Configurable template body</label>
-                    <textarea
-                      className="textarea template-body-editor"
-                      id={`${template.id}-body`}
-                      defaultValue={template.format === "html" ? template.htmlBody : template.body}
-                    />
-                  </div>
+                  <TemplateBodyEditor onSave={saveTemplateChanges} template={template} />
                 </article>
               ))}
             </div>
@@ -223,25 +416,124 @@ export function AdminClient() {
         {tab === "requests" && selected && (
           <RequestDetailModal
             request={selected}
+            templates={templates}
             updateStatus={updateStatus}
             updateField={updateField}
+            updateInternalNotes={updateInternalNotes}
             onClose={() => setSelectedId(null)}
           />
         )}
-      </section>
-    </main>
+        </section>
+      </main>
+      )}
+    </>
+  );
+}
+
+function TemplateBodyEditor({
+  onSave,
+  template
+}: {
+  onSave: (templateId: string, htmlBody: string) => Promise<void>;
+  template: DocumentTemplate;
+}) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const initialBodyRef = useRef(getEditableTemplateBody(template));
+  const initializedRef = useRef(false);
+  const [saveStatus, setSaveStatus] = useState("");
+
+  function setEditorNode(node: HTMLDivElement | null) {
+    editorRef.current = node;
+    if (node && !initializedRef.current) {
+      node.innerHTML = initialBodyRef.current;
+      initializedRef.current = true;
+    }
+  }
+
+  function applyFormat(command: "bold" | "italic" | "insertUnorderedList" | "insertOrderedList") {
+    editorRef.current?.focus();
+    document.execCommand(command);
+  }
+
+  function insertMergeField(field: string) {
+    editorRef.current?.focus();
+    document.execCommand("insertText", false, `{{${field}}}`);
+  }
+
+  async function saveChanges() {
+    const nextBody = editorRef.current?.innerHTML || "";
+    initialBodyRef.current = nextBody;
+    setSaveStatus("Saving...");
+    try {
+      await onSave(template.id, nextBody);
+      setSaveStatus("Changes saved.");
+    } catch (error) {
+      setSaveStatus(error instanceof Error ? error.message : "Could not save changes.");
+    }
+  }
+
+  return (
+    <div className="template-editor">
+      <div className="template-editor-head">
+        <label htmlFor={`${template.id}-body`}>Template body</label>
+        <span>Shared caption, legal table, and signature block are added automatically.</span>
+      </div>
+      <div className="template-editor-toolbar" aria-label={`${template.name} formatting controls`}>
+        <button className="button secondary compact-action" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("bold")}>
+          B
+        </button>
+        <button className="button secondary compact-action" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("italic")}>
+          I
+        </button>
+        <button className="button secondary compact-action" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("insertUnorderedList")}>
+          Bullets
+        </button>
+        <button className="button secondary compact-action" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("insertOrderedList")}>
+          Numbers
+        </button>
+        <button className="button primary compact-action" type="button" onMouseDown={(event) => event.preventDefault()} onClick={saveChanges}>
+          Save changes
+        </button>
+      </div>
+      {saveStatus && <p className="template-save-status">{saveStatus}</p>}
+      <div
+        className="template-body-editor"
+        contentEditable
+        id={`${template.id}-body`}
+        ref={setEditorNode}
+        role="textbox"
+        suppressContentEditableWarning
+      />
+      <div className="template-merge-list">
+        {(template.mergeFields || []).map((field) => (
+          <button
+            className="template-merge-chip"
+            key={field}
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => insertMergeField(field)}
+          >
+            {"{{"}{field}{"}}"}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
 function RequestDetailModal({
   request,
+  templates,
   updateStatus,
   updateField,
+  updateInternalNotes,
   onClose
 }: {
   request: QdroRequest;
+  templates: DocumentTemplate[];
   updateStatus: (id: string, status: RequestStatus) => void;
   updateField: (id: string, field: string, value: string) => void;
+  updateInternalNotes: (id: string, body: string) => void;
   onClose: () => void;
 }) {
   const [showPreview, setShowPreview] = useState(false);
@@ -263,26 +555,27 @@ function RequestDetailModal({
               {request.clientEmail} · {getEntityType(request)} · Total {formatCurrency(getRequestTotal(request))}
             </p>
           </div>
-          <button className="button secondary" type="button" onClick={onClose} aria-label="Close request detail">
-            Close
-          </button>
+          <div className="modal-head-actions">
+            <button className="button secondary" type="button" onClick={() => setShowPreview(!showPreview)}>
+              {showPreview ? "Hide preview" : "Preview document"}
+            </button>
+            <button className="button secondary" type="button" onClick={onClose} aria-label="Close request detail">
+              Close
+            </button>
+          </div>
         </div>
+        {showPreview && (
+          <div className="request-preview-panel">
+            <DocumentPreview request={request} templates={templates} />
+          </div>
+        )}
         <div className="request-modal-grid">
           <RequestEditor
             request={request}
             updateStatus={updateStatus}
             updateField={updateField}
-            showPreview={showPreview}
-            setShowPreview={setShowPreview}
+            updateInternalNotes={updateInternalNotes}
           />
-          <div className="modal-stack">
-            <RequestFilesAndNotes request={request} />
-          </div>
-          {showPreview && (
-            <div className="request-preview-panel">
-              <DocumentPreview request={request} />
-            </div>
-          )}
         </div>
       </section>
     </div>
@@ -293,14 +586,12 @@ function RequestEditor({
   request,
   updateStatus,
   updateField,
-  showPreview,
-  setShowPreview
+  updateInternalNotes
 }: {
   request: QdroRequest;
   updateStatus: (id: string, status: RequestStatus) => void;
   updateField: (id: string, field: string, value: string) => void;
-  showPreview: boolean;
-  setShowPreview: (showPreview: boolean) => void;
+  updateInternalNotes: (id: string, body: string) => void;
 }) {
   const schemaFieldIds = new Set(intakeSteps.flatMap((step) => step.fields.map((field) => field.id)));
   const extraFields = Object.entries(request.fields).filter(
@@ -320,6 +611,7 @@ function RequestEditor({
             ))}
           </select>
         </div>
+        <InternalNotes request={request} updateInternalNotes={updateInternalNotes} />
         <div className="admin-intake-sections">
           {intakeSteps.map((step) => {
             const visibleFields = step.fields.filter((field) => isAdminFieldVisible(field, request.fields));
@@ -330,16 +622,20 @@ function RequestEditor({
                   <span className="status info">{step.title}</span>
                   <p>{step.description}</p>
                 </div>
-                <div className="field-grid">
-                  {visibleFields.map((field) => (
-                    <AdminFieldControl
-                      field={field}
-                      key={field.id}
-                      request={request}
-                      updateField={updateField}
-                    />
-                  ))}
-                </div>
+                {step.id === "parties" ? (
+                  <AdminPartyFieldGroups fields={visibleFields} request={request} updateField={updateField} />
+                ) : (
+                  <div className="field-grid">
+                    {visibleFields.map((field) => (
+                      <AdminFieldControl
+                        field={field}
+                        key={field.id}
+                        request={request}
+                        updateField={updateField}
+                      />
+                    ))}
+                  </div>
+                )}
               </section>
             );
           })}
@@ -365,20 +661,7 @@ function RequestEditor({
             </section>
           )}
         </div>
-        <div className="field">
-          <label htmlFor="client-note">Add client-visible note</label>
-          <textarea className="textarea" id="client-note" placeholder="This demo UI shows where notes are added before saving to Firestore." />
-        </div>
         <div className="toolbar">
-          <button className="button secondary" type="button">
-            Generate DOCX
-          </button>
-          <button className="button secondary" type="button">
-            Send DocuSign
-          </button>
-          <button className="button secondary" type="button" onClick={() => setShowPreview(!showPreview)}>
-            {showPreview ? "Hide preview" : "Preview document"}
-          </button>
           <button className="button danger" type="button">
             Delete request
           </button>
@@ -484,39 +767,75 @@ function AdminFieldControl({
   );
 }
 
-function RequestFilesAndNotes({ request }: { request: QdroRequest }) {
+function AdminPartyFieldGroups({
+  fields,
+  request,
+  updateField
+}: {
+  fields: IntakeField[];
+  request: QdroRequest;
+  updateField: (id: string, field: string, value: string) => void;
+}) {
+  const party1Fields = fields.filter((field) => field.id.startsWith("party1_"));
+  const party2Fields = fields.filter((field) => field.id.startsWith("party2_"));
+  const remainingFields = fields.filter((field) => !field.id.startsWith("party1_") && !field.id.startsWith("party2_"));
+
   return (
-    <section className="panel">
-      <div className="request-support-grid">
-        <div>
-          <h3>Files</h3>
-          <div className="checklist">
-            {request.files.map((file) => (
-              <div className="mini-check" key={file.id}>
-                <span className="icon">✓</span>
-                <div>
-                  <strong>{file.label}</strong>
-                  <small>{file.fileName} · {file.status}</small>
-                </div>
-              </div>
-            ))}
-          </div>
+    <div className="party-field-groups">
+      <section className="party-field-group">
+        <div className="party-field-group-head">
+          <span className="status info">Party 1</span>
         </div>
-        <div>
-          <h3>Notes</h3>
-          <div className="checklist">
-            {request.notes.map((note) => (
-              <div className="mini-check" key={note.id}>
-                <span className={`status ${note.visibility === "internal" ? "warn" : "info"}`}>{note.visibility}</span>
-                <div>
-                  <strong>{note.author}</strong>
-                  <small>{formatDate(note.createdAt)}</small>
-                  <p style={{ margin: "4px 0 0" }}>{note.body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="field-grid">
+          {party1Fields.map((field) => (
+            <AdminFieldControl field={field} key={field.id} request={request} updateField={updateField} />
+          ))}
         </div>
+      </section>
+      <section className="party-field-group party-field-group-secondary">
+        <div className="party-field-group-head">
+          <span className="status info">Party 2</span>
+        </div>
+        <div className="field-grid">
+          {party2Fields.map((field) => (
+            <AdminFieldControl field={field} key={field.id} request={request} updateField={updateField} />
+          ))}
+        </div>
+      </section>
+      {remainingFields.length > 0 && (
+        <div className="field-grid">
+          {remainingFields.map((field) => (
+            <AdminFieldControl field={field} key={field.id} request={request} updateField={updateField} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InternalNotes({
+  request,
+  updateInternalNotes
+}: {
+  request: QdroRequest;
+  updateInternalNotes: (id: string, body: string) => void;
+}) {
+  const internalNoteText = request.notes
+    .filter((note) => note.visibility === "internal")
+    .map((note) => note.body)
+    .join("\n\n");
+
+  return (
+    <section className="admin-intake-step internal-notes">
+      <div className="field">
+        <label htmlFor={`internal-notes-${request.id}`}>Internal Notes</label>
+        <textarea
+          className="textarea internal-notes-textarea"
+          id={`internal-notes-${request.id}`}
+          value={internalNoteText}
+          onChange={(event) => updateInternalNotes(request.id, event.target.value)}
+          placeholder="Add internal notes for this request."
+        />
       </div>
     </section>
   );
@@ -537,6 +856,33 @@ function getUpdatedRequestFields(fields: QdroRequest["fields"], field: string, v
     court_county: court?.county || "",
     district: court?.district || ""
   };
+}
+
+function getUpdatedInternalNotes(notes: QdroRequest["notes"], body: string): QdroRequest["notes"] {
+  const trimmedBody = body.trim();
+  const externalNotes = notes.filter((note) => note.visibility !== "internal");
+  if (!trimmedBody) return externalNotes;
+
+  const existingInternalNote = notes.find((note) => note.visibility === "internal");
+  return [
+    ...externalNotes,
+    {
+      id: existingInternalNote?.id || "internal-note",
+      author: existingInternalNote?.author || "Admin",
+      body,
+      visibility: "internal",
+      createdAt: existingInternalNote?.createdAt || new Date().toISOString()
+    }
+  ];
+}
+
+function getFirebaseAuthMessage(error: unknown) {
+  if (error instanceof Error && error.message.includes("auth/invalid-credential")) {
+    return "That email/password was not accepted by Firebase. Create the user in Firebase Authentication or reset the password, then try again.";
+  }
+
+  if (error instanceof Error) return error.message;
+  return "Unable to sign in.";
 }
 
 function hasDisplayValue(value: QdroRequest["fields"][string]) {

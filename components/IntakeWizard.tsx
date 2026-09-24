@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  type User
+} from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 import { demoRequest, intakeSteps } from "@/lib/content";
+import { auth, db, hasFirebaseConfig } from "@/lib/firebase";
 import type { IntakeField, QdroRequest } from "@/lib/types";
 import { findUtahCourt } from "@/lib/utah-courts";
 import { SignaturePad } from "./SignaturePad";
@@ -40,11 +48,17 @@ type WizardData = Record<string, string | boolean>;
 const storageKey = "utah-qdro-intake";
 
 export function IntakeWizard() {
-  const [activeStep, setActiveStep] = useState(0);
+  const [activeStep, setActiveStep] = useState(-2);
   const [ready, setReady] = useState<Record<string, boolean>>({});
   const [data, setData] = useState<WizardData>({});
   const [savedAt, setSavedAt] = useState<string>("");
   const [submitted, setSubmitted] = useState(false);
+  const [clientUser, setClientUser] = useState<User | null>(null);
+  const [accountMode, setAccountMode] = useState<"create" | "sign-in">("create");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountMessage, setAccountMessage] = useState("");
+  const [isAccountSubmitting, setIsAccountSubmitting] = useState(false);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(storageKey);
@@ -52,7 +66,21 @@ export function IntakeWizard() {
       const parsed = JSON.parse(saved) as { data?: WizardData; ready?: Record<string, boolean> };
       setData(parsed.data || {});
       setReady(parsed.ready || {});
+      if (readinessChecks.every((check) => parsed.ready?.[check.id])) {
+        setActiveStep(-1);
+      }
     }
+  }, []);
+
+  useEffect(() => {
+    if (!auth) return;
+    return onAuthStateChanged(auth, (currentUser) => {
+      setClientUser(currentUser);
+      if (currentUser?.email) {
+        setAccountEmail(currentUser.email);
+        setData((current) => current.party1_email ? current : { ...current, party1_email: currentUser.email || "" });
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -64,9 +92,10 @@ export function IntakeWizard() {
   }, [data, ready]);
 
   const readyComplete = readinessChecks.every((check) => ready[check.id]);
-  const visibleSteps = readyComplete ? intakeSteps : [];
+  const accountComplete = Boolean(clientUser);
+  const visibleSteps = readyComplete && accountComplete ? intakeSteps : [];
   const readinessProgress = Object.values(ready).filter(Boolean).length / readinessChecks.length;
-  const activeFormStep = intakeSteps[Math.min(activeStep, intakeSteps.length - 1)];
+  const activeFormStep = activeStep >= 0 ? intakeSteps[Math.min(activeStep, intakeSteps.length - 1)] : undefined;
   const visibleActiveFields = activeFormStep?.fields.filter((field) => isFieldVisible(field, data)) || [];
   const completedActiveFields = visibleActiveFields.filter((field) => !field.required || Boolean(data[field.id])).length;
   const activeStepFieldProgress = visibleActiveFields.length ? completedActiveFields / visibleActiveFields.length : 0;
@@ -76,7 +105,7 @@ export function IntakeWizard() {
       : (activeStep + activeStepFieldProgress) / (intakeSteps.length + 1);
   const progress = Math.min(
     100,
-    Math.round(readyComplete ? 35 + formPositionProgress * 65 : readinessProgress * 35)
+    Math.round(!readyComplete ? readinessProgress * 35 : !accountComplete ? 45 : 45 + formPositionProgress * 55)
   );
 
   const request = useMemo<QdroRequest>(() => {
@@ -85,14 +114,14 @@ export function IntakeWizard() {
       ...demoRequest,
       id: "DRAFT",
       clientName: String(fields.party1_name || "New client"),
-      clientEmail: String(fields.party1_email || ""),
+      clientEmail: String(fields.party1_email || clientUser?.email || ""),
       status: submitted ? "Payment Pending" : "Draft",
       paymentState: submitted ? "pending" : "unpaid",
       signatureState: "not_started",
       templateFamily: String(fields.plan_family || "Multi-template / other"),
       fields
     };
-  }, [data, submitted]);
+  }, [clientUser?.email, data, submitted]);
 
   function updateField(id: string, value: string | boolean) {
     setData((current) => {
@@ -125,6 +154,37 @@ export function IntakeWizard() {
     alert(payload.message || "Payment route is ready. Add Stripe credentials to enable live checkout.");
   }
 
+  async function handleAccountSubmit() {
+    setAccountMessage("");
+    if (!hasFirebaseConfig || !auth || !db) {
+      setAccountMessage("Firebase is not configured in this environment yet.");
+      return;
+    }
+
+    try {
+      setIsAccountSubmitting(true);
+      if (accountMode === "create") {
+        const credential = await createUserWithEmailAndPassword(auth, accountEmail, accountPassword);
+        await setDoc(doc(db, "users", credential.user.uid), {
+          uid: credential.user.uid,
+          email: credential.user.email || accountEmail,
+          displayName: credential.user.email || accountEmail,
+          role: "client",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        await signInWithEmailAndPassword(auth, accountEmail, accountPassword);
+      }
+      setData((current) => current.party1_email ? current : { ...current, party1_email: accountEmail });
+      setActiveStep(0);
+    } catch (error) {
+      setAccountMessage(error instanceof Error ? error.message : "Unable to continue. Please try again.");
+    } finally {
+      setIsAccountSubmitting(false);
+    }
+  }
+
   return (
     <div className="form-layout">
       <aside className="sidebar">
@@ -135,9 +195,14 @@ export function IntakeWizard() {
             <div className="progress-fill" style={{ width: `${progress}%` }} />
           </div>
         </div>
-        <button className={`step-tab ${!readyComplete ? "active" : ""}`} type="button" onClick={() => setActiveStep(0)}>
+        <button className={`step-tab ${activeStep === -2 ? "active" : ""}`} type="button" onClick={() => setActiveStep(-2)}>
           Readiness
         </button>
+        {readyComplete && (
+          <button className={`step-tab ${activeStep === -1 ? "active" : ""}`} type="button" onClick={() => setActiveStep(-1)}>
+            Account setup
+          </button>
+        )}
         {visibleSteps.map((step, index) => (
           <button
             className={`step-tab ${readyComplete && activeStep === index ? "active" : ""}`}
@@ -148,7 +213,7 @@ export function IntakeWizard() {
             {step.title}
           </button>
         ))}
-        {readyComplete && (
+        {readyComplete && accountComplete && (
           <button
             className={`step-tab ${activeStep === intakeSteps.length ? "active" : ""}`}
             type="button"
@@ -160,7 +225,7 @@ export function IntakeWizard() {
       </aside>
 
       <div className="wizard">
-        {!readyComplete ? (
+        {activeStep === -2 ? (
           <section className="panel">
             <span className="status warn">Readiness checklist</span>
             <h1 style={{ marginTop: 14 }}>Before we start, confirm you have what we need.</h1>
@@ -183,7 +248,29 @@ export function IntakeWizard() {
                 </label>
               ))}
             </div>
+            <div className="toolbar">
+              <button className="button primary" type="button" disabled={!readyComplete} onClick={() => setActiveStep(-1)}>
+                Continue to account setup
+              </button>
+            </div>
+            {!readyComplete && <p>Check each item when you are ready to begin the request.</p>}
           </section>
+        ) : activeStep === -1 || !accountComplete ? (
+          <AccountSetupStep
+            accountEmail={accountEmail}
+            accountMessage={accountMessage}
+            accountMode={accountMode}
+            accountPassword={accountPassword}
+            clientUser={clientUser}
+            isAccountSubmitting={isAccountSubmitting}
+            onBack={() => setActiveStep(-2)}
+            onContinue={() => setActiveStep(0)}
+            onSubmit={handleAccountSubmit}
+            setAccountEmail={setAccountEmail}
+            setAccountMessage={setAccountMessage}
+            setAccountMode={setAccountMode}
+            setAccountPassword={setAccountPassword}
+          />
         ) : activeStep < intakeSteps.length ? (
           <WizardStep
             step={intakeSteps[activeStep]}
@@ -254,6 +341,112 @@ export function IntakeWizard() {
   );
 }
 
+function AccountSetupStep({
+  accountEmail,
+  accountMessage,
+  accountMode,
+  accountPassword,
+  clientUser,
+  isAccountSubmitting,
+  onBack,
+  onContinue,
+  onSubmit,
+  setAccountEmail,
+  setAccountMessage,
+  setAccountMode,
+  setAccountPassword
+}: {
+  accountEmail: string;
+  accountMessage: string;
+  accountMode: "create" | "sign-in";
+  accountPassword: string;
+  clientUser: User | null;
+  isAccountSubmitting: boolean;
+  onBack: () => void;
+  onContinue: () => void;
+  onSubmit: () => void;
+  setAccountEmail: (value: string) => void;
+  setAccountMessage: (value: string) => void;
+  setAccountMode: (value: "create" | "sign-in") => void;
+  setAccountPassword: (value: string) => void;
+}) {
+  if (clientUser) {
+    return (
+      <section className="panel">
+        <span className="status info">Account ready</span>
+        <h1 style={{ marginTop: 14 }}>Your request will be saved to your account.</h1>
+        <p>
+          Signed in as {clientUser.email}. Continue the QDRO request and your
+          progress will stay connected to this account.
+        </p>
+        <div className="toolbar">
+          <button className="button secondary" type="button" onClick={onBack}>
+            Back
+          </button>
+          <button className="button primary" type="button" onClick={onContinue}>
+            Continue QDRO request
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel account-setup-panel">
+      <span className="status info">{accountMode === "create" ? "Create account" : "Sign in"}</span>
+      <h1 style={{ marginTop: 14 }}>Set up your account before continuing.</h1>
+      <p>
+        This keeps your QDRO request, uploads, signature, payment status, and
+        future updates tied to one secure place.
+      </p>
+      <div className="field-grid one">
+        <div className="field">
+          <label htmlFor="intake-account-email">Email</label>
+          <input
+            className="input"
+            id="intake-account-email"
+            type="email"
+            value={accountEmail}
+            onChange={(event) => setAccountEmail(event.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="intake-account-password">Password</label>
+          <input
+            className="input"
+            id="intake-account-password"
+            type="password"
+            value={accountPassword}
+            onChange={(event) => setAccountPassword(event.target.value)}
+          />
+        </div>
+      </div>
+      {accountMessage && <p style={{ color: "var(--danger)" }}>{accountMessage}</p>}
+      <div className="toolbar">
+        <button className="button secondary" type="button" onClick={onBack}>
+          Back
+        </button>
+        <button className="button primary" type="button" onClick={onSubmit} disabled={isAccountSubmitting || !accountEmail || !accountPassword}>
+          {isAccountSubmitting ? "Working..." : accountMode === "create" ? "Create account and continue" : "Sign in and continue"}
+        </button>
+      </div>
+      <p>
+        {accountMode === "create" ? "Already have an account?" : "Need an account?"}{" "}
+        <button
+          className="button ghost"
+          type="button"
+          onClick={() => {
+            setAccountMode(accountMode === "create" ? "sign-in" : "create");
+            setAccountMessage("");
+          }}
+        >
+          {accountMode === "create" ? "Sign in" : "Create account"}
+        </button>
+      </p>
+    </section>
+  );
+}
+
 function WizardStep({
   step,
   data,
@@ -267,16 +460,22 @@ function WizardStep({
   onBack: () => void;
   onNext: () => void;
 }) {
+  const visibleFields = step.fields.filter((field) => isFieldVisible(field, data));
+
   return (
     <section className="panel">
       <span className="status info">{step.title}</span>
       <h1 style={{ marginTop: 14 }}>{step.title}</h1>
       <p>{step.description}</p>
-      <div className="field-grid">
-        {step.fields.filter((field) => isFieldVisible(field, data)).map((field) => (
-          <FieldControl key={field.id} field={field} value={data[field.id]} onChange={(value) => updateField(field.id, value)} />
-        ))}
-      </div>
+      {step.id === "parties" ? (
+        <WizardPartyFieldGroups fields={visibleFields} data={data} updateField={updateField} />
+      ) : (
+        <div className="field-grid">
+          {visibleFields.map((field) => (
+            <FieldControl key={field.id} field={field} value={data[field.id]} onChange={(value) => updateField(field.id, value)} />
+          ))}
+        </div>
+      )}
       {data.is_ira === "Yes" && data.ira_admin_confirmed !== "Yes" && (
         <div className="card" style={{ marginTop: 18, borderColor: "#f59e0b" }}>
           <h3>IRA warning</h3>
@@ -295,6 +494,52 @@ function WizardStep({
         </button>
       </div>
     </section>
+  );
+}
+
+function WizardPartyFieldGroups({
+  fields,
+  data,
+  updateField
+}: {
+  fields: IntakeField[];
+  data: WizardData;
+  updateField: (id: string, value: string | boolean) => void;
+}) {
+  const party1Fields = fields.filter((field) => field.id.startsWith("party1_"));
+  const party2Fields = fields.filter((field) => field.id.startsWith("party2_"));
+  const remainingFields = fields.filter((field) => !field.id.startsWith("party1_") && !field.id.startsWith("party2_"));
+
+  return (
+    <div className="party-field-groups">
+      <section className="party-field-group">
+        <div className="party-field-group-head">
+          <span className="status info">Party 1</span>
+        </div>
+        <div className="field-grid">
+          {party1Fields.map((field) => (
+            <FieldControl key={field.id} field={field} value={data[field.id]} onChange={(value) => updateField(field.id, value)} />
+          ))}
+        </div>
+      </section>
+      <section className="party-field-group party-field-group-secondary">
+        <div className="party-field-group-head">
+          <span className="status info">Party 2</span>
+        </div>
+        <div className="field-grid">
+          {party2Fields.map((field) => (
+            <FieldControl key={field.id} field={field} value={data[field.id]} onChange={(value) => updateField(field.id, value)} />
+          ))}
+        </div>
+      </section>
+      {remainingFields.length > 0 && (
+        <div className="field-grid">
+          {remainingFields.map((field) => (
+            <FieldControl key={field.id} field={field} value={data[field.id]} onChange={(value) => updateField(field.id, value)} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

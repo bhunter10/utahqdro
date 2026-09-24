@@ -1,23 +1,15 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { demoRequest } from "@/lib/content";
-import { renderDocxBuffer, renderDocumentHtml, renderRtf } from "@/lib/document-engine";
+import { demoRequest, documentTemplates } from "@/lib/content";
+import { renderDocumentHtml, renderRtf } from "@/lib/document-engine";
+import { getAdminDb } from "@/lib/firebase-admin";
+import type { DocumentTemplate } from "@/lib/types";
 
 export async function POST(req: Request) {
   const { format = "pdf", request = demoRequest } = (await req.json()) as {
-    format?: "html" | "pdf" | "docx" | "rtf" | "google-doc" | "google-html-debug";
+    format?: "html" | "pdf" | "rtf" | "google-doc";
     request?: typeof demoRequest;
   };
-
-  if (format === "docx") {
-    const buffer = await renderDocxBuffer(request);
-    return new Response(buffer, {
-      headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "Content-Disposition": `attachment; filename="${request.id || "qdro"}.docx"`
-      }
-    });
-  }
 
   if (format === "rtf") {
     return new Response(renderRtf(request), {
@@ -48,17 +40,8 @@ export async function POST(req: Request) {
     }
   }
 
-  if (format === "google-html-debug") {
-    const html = renderDocumentHtml(request, false, { includeTemplateLabel: false });
-    return new Response(googleDocHtmlShell(html), {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${request.id || "qdro"}-google-export-debug.html"`
-      }
-    });
-  }
-
-  return new Response(renderDocumentHtml(request), {
+  const templates = await loadDatabaseTemplates();
+  return new Response(renderDocumentHtml(request, false, { templates }), {
     headers: {
       "Content-Type": "text/html; charset=utf-8"
     }
@@ -77,7 +60,8 @@ async function createGoogleDocument(request: typeof demoRequest) {
   }
 
   const accessToken = await getGoogleAccessToken(refreshToken);
-  const html = renderDocumentHtml(request, false, { includeTemplateLabel: false });
+  const templates = await loadDatabaseTemplates();
+  const html = renderDocumentHtml(request, false, { includeTemplateLabel: false, templates, wrapDocument: false, wrapBody: false });
   const boundary = `utahqdro-${Date.now()}`;
   const metadata = {
     name: `${request.id || "QDRO"} - ${request.clientName || "Client"} Draft`,
@@ -92,7 +76,7 @@ async function createGoogleDocument(request: typeof demoRequest) {
     `--${boundary}`,
     "Content-Type: text/html; charset=UTF-8",
     "",
-    googleDocHtmlShell(html),
+    googleDocHtmlShell(html.trim()),
     `--${boundary}--`
   ].join("\r\n");
 
@@ -111,6 +95,30 @@ async function createGoogleDocument(request: typeof demoRequest) {
   }
 
   return response.json() as Promise<{ id: string; name: string; webViewLink: string }>;
+}
+
+async function loadDatabaseTemplates() {
+  const db = getAdminDb();
+  if (!db) return documentTemplates;
+
+  const snapshot = await db.collection("documentTemplates").where("active", "==", true).get();
+  if (snapshot.empty) return documentTemplates;
+
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      name: String(data.name || ""),
+      family: String(data.family || ""),
+      version: Number(data.version || 1),
+      description: String(data.description || ""),
+      format: data.format === "html" || data.format === "plain" ? data.format : undefined,
+      body: typeof data.body === "string" ? data.body : undefined,
+      htmlBody: typeof data.htmlBody === "string" ? data.htmlBody : undefined,
+      mergeFields: Array.isArray(data.mergeFields) ? data.mergeFields.filter((field) => typeof field === "string") : undefined,
+      active: Boolean(data.active)
+    } satisfies DocumentTemplate;
+  });
 }
 
 async function getGoogleAccessToken(refreshToken: string) {

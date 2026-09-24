@@ -1,9 +1,9 @@
 import { AdminClient } from "@/components/AdminClient";
 
-export default function AdminPage() {
+export default function AdminRequestsPage() {
   return (
     <div className="site-shell">
-      <AdminClient mode="login" />
+      <AdminClient initialTab="requests" />
     </div>
   );
 }

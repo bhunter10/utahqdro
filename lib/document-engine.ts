@@ -1,4 +1,3 @@
-import { Document, Packer, Paragraph, TextRun } from "docx";
 import { documentTemplates } from "./content";
 import type { DocumentTemplate, QdroRequest } from "./types";
 import { findUtahCourt } from "./utah-courts";
@@ -34,12 +33,13 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
   const alternate = owner === "Party 2" ? party1 : party2;
   const divisionType = value(request.fields, "division_type");
   const percentAward = value(request.fields, "percent_award");
+  const fixedAward = value(request.fields, "fixed_award");
   const awardText =
-    divisionType === "Fixed amount"
-      ? `$${value(request.fields, "fixed_award") || "0"}`
+    divisionType === "Fixed amount" && fixedAward
+      ? formatCurrencyValue(fixedAward)
       : divisionType === "Percentage"
-        ? `${percentAward || "0"}%`
-        : "to be confirmed by UtahQDRO";
+        ? `${percentAward || "50"}%`
+        : "50%";
   const amendedText = value(request.fields, "amended_text");
   const entityAccountType = [value(request.fields, "entity_name"), value(request.fields, "account_type")]
     .filter(Boolean)
@@ -73,11 +73,21 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     alternate_payee_phone: alternate.phone,
     alternate_payee_email: alternate.email,
     award_text: awardText,
-    percent_amount: divisionType === "Fixed amount" ? "50%" : `${percentAward || "0"}%`,
+    percent_amount: divisionType === "Fixed amount" && fixedAward ? formatCurrencyValue(fixedAward) : `${percentAward || "50"}%`,
     valuation_date: formatDisplayDate(value(request.fields, "valuation_date")) || "the Date of Transfer",
     adjust_market: value(request.fields, "market_adjustment").toLowerCase() === "no" ? "is not" : "is",
     special_terms: value(request.fields, "special_terms") || "None stated."
   };
+}
+
+function formatCurrencyValue(amount: string) {
+  const numericAmount = Number(amount.replace(/[$,]/g, ""));
+  if (!Number.isFinite(numericAmount)) return amount || "$0";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2
+  }).format(numericAmount);
 }
 
 export function maskSsn(ssn: string) {
@@ -87,38 +97,51 @@ export function maskSsn(ssn: string) {
 }
 
 export function selectTemplate(request: QdroRequest): DocumentTemplate {
+  return selectTemplateFromList(request, documentTemplates);
+}
+
+export function selectTemplateFromList(request: QdroRequest, templates: DocumentTemplate[]): DocumentTemplate {
   return (
-    documentTemplates.find((template) => template.family === request.templateFamily && template.active) ||
-    documentTemplates.find((template) => template.family === String(request.fields.plan_family) && template.active) ||
+    templates.find((template) => template.family === request.templateFamily && template.active) ||
+    templates.find((template) => template.family === String(request.fields.plan_family) && template.active) ||
+    templates[1] ||
     documentTemplates[1]
   );
 }
 
 export function renderTemplate(template: DocumentTemplate, request: QdroRequest, maskSensitive = false) {
   const data = deriveDocumentData(request, maskSensitive);
-  const source = template.format === "html" ? template.htmlBody || "" : template.body || "";
+  const source = getEditableTemplateBody(template);
   return source.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => {
     const cleanKey = key.trim() as keyof typeof data;
     const merged = String(data[cleanKey] ?? "");
-    return template.format === "html" ? escapeHtml(merged) : merged;
+    return escapeHtml(merged);
   });
 }
 
-export function renderDocumentHtml(request: QdroRequest, maskSensitive = false, options: { includeTemplateLabel?: boolean } = {}) {
-  const template = selectTemplate(request);
-  const rendered = inlineDocumentStyles(renderTemplate(template, request, maskSensitive));
+export function getEditableTemplateBody(template: DocumentTemplate) {
   if (template.format === "html") {
-    const templateLabel = options.includeTemplateLabel === false
-      ? ""
-      : `<div style="margin: 0 0 12pt; color: #64748b; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;">${escapeHtml(template.name)} · configurable template v${template.version}</div>`;
-    return `<article style="max-width: 8.5in; margin: 0 auto; color: #000000; font-family: Times New Roman; font-size: 12pt; line-height: 14pt;">${templateLabel}${rendered}</article>`;
+    return stripLegacyDocumentShell(template.htmlBody || "");
   }
-  const paragraphs = rendered
-    .split(/\n{2,}/)
-    .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br />")}</p>`)
-    .join("");
+  return plainTextToTemplateHtml(template.body || "");
+}
 
-  return `<article style="font-family: Times New Roman; font-size: 12pt; line-height: 14pt;"><h2>${escapeHtml(template.name)}</h2>${paragraphs}</article>`;
+export function renderDocumentHtml(
+  request: QdroRequest,
+  maskSensitive = false,
+  options: { includeTemplateLabel?: boolean; templates?: DocumentTemplate[]; wrapDocument?: boolean; wrapBody?: boolean } = {}
+) {
+  const template = options.templates ? selectTemplateFromList(request, options.templates) : selectTemplate(request);
+  const data = deriveDocumentData(request, maskSensitive);
+  const rendered = inlineDocumentStyles(renderTemplate(template, request, maskSensitive));
+  const templateLabel = options.includeTemplateLabel === false
+    ? ""
+    : `<div style="margin: 0 0 12pt; color: #64748b; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;">${escapeHtml(template.name)} · configurable template v${template.version}</div>`;
+
+  const documentBody = `${templateLabel}${renderCommonDocumentShell(rendered, data, { wrapBody: options.wrapBody !== false })}`;
+  if (options.wrapDocument === false) return documentBody;
+
+  return `<article style="max-width: 8.5in; margin: 0 auto; color: #000000; font-family: Times New Roman; font-size: 12pt; line-height: 14pt;">${documentBody}</article>`;
 }
 
 function inlineDocumentStyles(html: string) {
@@ -136,6 +159,175 @@ function inlineDocumentStyles(html: string) {
     .replace(/<p class="court-footer">/g, `<p style="${footerStyle}">`);
 }
 
+function normalizeDocumentBodyHtml(html: string) {
+  return html
+    .replace(/color:\s*[^;"']+;?/gi, "color: #000000;")
+    .replace(/<span([^>]*)>/gi, "<span$1 style=\"color: #000000;\">")
+    .replace(/<(ul|ol)([^>]*)>/gi, '<$1$2 style="margin: 0 0 12pt 0.5in; color: #000000;">')
+    .replace(/<li([^>]*)>/gi, '<li$1 style="margin: 0 0 6pt; color: #000000;">');
+}
+
+
+function stripLegacyDocumentShell(source: string) {
+  const bodyStart = source.search(/<p class="indent">WHEREAS/i);
+  const signatureStart = source.search(/<table class="signature-block"/i);
+  if (bodyStart >= 0 && signatureStart > bodyStart) {
+    return source.slice(bodyStart, signatureStart).trim();
+  }
+  return source;
+}
+
+function plainTextToTemplateHtml(source: string) {
+  return source
+    .split(/\n{2,}/)
+    .map((block) => `<p>${escapeHtml(block.trim()).replace(/\n/g, "<br />")}</p>`)
+    .join("\n");
+}
+
+function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof deriveDocumentData>, options: { wrapBody?: boolean } = {}) {
+  const normalizedBody = normalizeDocumentBodyHtml(bodyHtml).trim();
+  const bodySection = options.wrapBody === false
+    ? normalizedBody
+    : `<div class="document-body" style="margin-top: 18pt; margin-bottom: 18pt; color: #000000;">${normalizedBody}</div>`;
+  const captionTableMargin = options.wrapBody === false ? " margin: 0 0 12pt;" : "";
+
+  return `<p style="margin: 0 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000;">David J. Hunter (9015)<br />
+    3915 Timpview Dr., Provo, UT 84604<br />
+    801-473-4444 dave@utahmediations.com<br />
+    <br />
+    <em>Counsel for ${escapeHtml(data.counsel_for)}</em>
+  </p>
+
+  <table cellpadding="0" cellspacing="0" style="border-collapse: collapse; border: none; margin: 12pt 0; width: 100%; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+    <tbody>
+      <tr>
+        <td style="border: none; padding: 0; text-align: center; text-transform: uppercase;">IN THE ${escapeHtml(data.district)} JUDICIAL DISTRICT COURT IN AND FOR ${escapeHtml(data.court_county)} COUNTY</td>
+      </tr>
+      <tr>
+        <td style="border: none; padding: 0; text-align: center; text-transform: uppercase;">STATE OF UTAH</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table style="width: 100%; border-collapse: collapse; table-layout: fixed; border-left: none; border-right: none; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;${captionTableMargin}">
+    <colgroup>
+      <col style="width: 50%;" />
+      <col style="width: 50%;" />
+    </colgroup>
+    <tbody>
+      <tr>
+        <td style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: 1px solid #000000; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+          <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; color: #000000;">
+            <tbody>
+              <tr>
+                <td style="border: none; padding: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">In the Matter of the Marriage of</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${escapeHtml(data.party1_name_upper)}, and</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${escapeHtml(data.party2_name_upper)}.</td>
+              </tr>
+            </tbody>
+          </table>
+        </td>
+        <td style="width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: none; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+          <table cellpadding="0" cellspacing="0" style="width: 100%; padding-left: 12pt; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+            <tbody>
+              <tr>
+                <td style="border: none; padding: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${escapeHtml(data.order_title)}</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Re: ${escapeHtml(data.entity_account_type)}</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Case No. ${escapeHtml(data.case_number)}</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Judge ${escapeHtml(data.judge_name)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </td>
+      </tr>
+    </tbody>
+  </table>${bodySection}<table class="signature-block" style="width: 100%; border-collapse: collapse; table-layout: fixed; border: none; margin-top: 24pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
+    <colgroup>
+      <col style="width: 50%;" />
+      <col style="width: 50%;" />
+    </colgroup>
+    <tbody>
+      <tr>
+        <td style="width: 50%; border: none; padding: 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+          <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+            <tbody>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Approved as to form:_____________________</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">&nbsp;</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">&nbsp;</td>
+              </tr>
+            </tbody>
+          </table>
+        </td>
+        <td style="width: 50%; border: none; padding: 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+          <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; color: #000000;">
+            <tbody>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; color: #000000;">________________________________</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; color: #000000;">${escapeHtml(data.participant_name)}, Participant,</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">(Signed Electronically)</td>
+              </tr>
+            </tbody>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td style="width: 50%; border: none; padding: 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+          <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+            <tbody>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Approved as to form: ____________________</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">&nbsp;</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">&nbsp;</td>
+              </tr>
+            </tbody>
+          </table>
+        </td>
+        <td style="width: 50%; border: none; padding: 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+          <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
+            <tbody>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">________________________________</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${escapeHtml(data.alternate_payee_name)}, Alternate Payee,</td>
+              </tr>
+              <tr>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">(Signed Electronically)</td>
+              </tr>
+            </tbody>
+          </table>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="court-footer" style="font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000; padding-top: 12pt; text-align: center;"><em>THIS IS THE SIGNED ORDER OF THE COURT WHEN SIGNED ELECTRONICALLY BY THE COURT ON THE FIRST PAGE OF THIS DOCUMENT</em></p>
+`;
+}
+
 export function renderRtf(request: QdroRequest, maskSensitive = false) {
   const template = selectTemplate(request);
   const rendered = stripHtml(renderTemplate(template, request, maskSensitive));
@@ -145,29 +337,6 @@ export function renderRtf(request: QdroRequest, maskSensitive = false) {
     .replace(/\}/g, "\\}")
     .replace(/\n/g, "\\par\n");
   return `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Times New Roman;}}\\f0\\fs24\\b ${template.name}\\b0\\par ${safe}}`;
-}
-
-export async function renderDocxBuffer(request: QdroRequest, maskSensitive = false) {
-  const template = selectTemplate(request);
-  const rendered = stripHtml(renderTemplate(template, request, maskSensitive));
-  const doc = new Document({
-    sections: [
-      {
-        children: [
-          new Paragraph({
-            children: [new TextRun({ text: template.name, bold: true, size: 28 })]
-          }),
-          ...rendered.split("\n").map(
-            (line) =>
-              new Paragraph({
-                children: [new TextRun({ text: line || " ", size: 24 })]
-              })
-          )
-        ]
-      }
-    ]
-  });
-  return Buffer.from(await Packer.toBuffer(doc));
 }
 
 function escapeHtml(valueToEscape: string) {
