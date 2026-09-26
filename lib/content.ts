@@ -26,6 +26,16 @@ export const statuses: RequestStatus[] = [
 
 export const intakeSteps: IntakeStep[] = [
   {
+    id: "uploads",
+    title: "Uploads",
+    description: "Upload the documents needed before drafting can begin.",
+    fields: [
+      { id: "signed_decree", label: "Signed divorce decree", type: "file", required: true, help: "PDF preferred." },
+      { id: "account_statement", label: "Retirement account statement", type: "file", required: true, help: "PDF or image accepted." },
+      { id: "additional_documents", label: "Additional documents", type: "file" }
+    ]
+  },
+  {
     id: "case",
     title: "Case details",
     description: "Start with the basics from your divorce case and signed decree.",
@@ -42,18 +52,26 @@ export const intakeSteps: IntakeStep[] = [
         label: "Which court was your case assigned to?",
         type: "select",
         required: true,
-        options: ["I don't know", ...utahCourtOptions]
+        options: utahCourtOptions
       },
       {
         id: "judge_name",
         label: "Judge who signed the decree",
         type: "text",
         required: true,
-        placeholder: "Choose I don't know if you need us to confirm"
+        fullWidth: true,
+        constrained: true,
+        placeholder: "Judge's full name"
+      },
+      {
+        id: "marriage_date",
+        label: "Marriage date",
+        type: "date",
+        required: true
       },
       {
         id: "divorce_date",
-        label: "Date the decree was signed",
+        label: "Divorce date",
         type: "date",
         required: true
       }
@@ -62,23 +80,68 @@ export const intakeSteps: IntakeStep[] = [
   {
     id: "parties",
     title: "Parties",
-    description: "Tell us who owns the retirement account and who will receive the divided share.",
+    description: "",
     fields: [
+      {
+        id: "requester_role",
+        label: "Who is completing this request?",
+        type: "radio",
+        required: true,
+        options: [
+          "I am the first name listed in the court case title",
+          "I am the second name listed in the court case title",
+          "I am requesting this for someone else"
+        ]
+      },
+      {
+        id: "requester_name",
+        label: "Requester name",
+        type: "text",
+        required: true,
+        conditional: { field: "requester_role", equals: "I am requesting this for someone else" }
+      },
+      {
+        id: "requester_phone",
+        label: "Requester phone",
+        type: "phone",
+        required: true,
+        conditional: { field: "requester_role", equals: "I am requesting this for someone else" }
+      },
+      {
+        id: "requester_email",
+        label: "Requester email",
+        type: "email",
+        required: true,
+        conditional: { field: "requester_role", equals: "I am requesting this for someone else" }
+      },
+      {
+        id: "requester_affiliation",
+        label: "Which party are you affiliated with?",
+        type: "radio",
+        required: true,
+        options: ["Party 1", "Party 2", "Both"],
+        conditional: { field: "requester_role", equals: "I am requesting this for someone else" }
+      },
       { id: "party1_name", label: "Party 1 full name", type: "text", required: true },
       { id: "party1_email", label: "Party 1 email", type: "email", required: true },
+      { id: "party1_phone", label: "Party 1 phone", type: "phone", required: true },
+      { id: "party1_address_street", label: "Party 1 street address", type: "text", required: true },
+      { id: "party1_address_line2", label: "Party 1 address line 2", type: "text" },
+      { id: "party1_address_city", label: "Party 1 city", type: "text", required: true },
+      { id: "party1_address_state", label: "Party 1 state", type: "text", required: true },
+      { id: "party1_address_zip", label: "Party 1 zip code", type: "text", required: true },
       { id: "party1_ssn", label: "Party 1 SSN", type: "text", required: true, sensitive: true, placeholder: "xxx-xx-xxxx" },
       { id: "party1_dob", label: "Party 1 date of birth", type: "date", required: true },
       { id: "party2_name", label: "Party 2 full name", type: "text", required: true },
       { id: "party2_email", label: "Party 2 email", type: "email", required: true },
+      { id: "party2_phone", label: "Party 2 phone", type: "phone", required: true },
+      { id: "party2_address_street", label: "Party 2 street address", type: "text", required: true },
+      { id: "party2_address_line2", label: "Party 2 address line 2", type: "text" },
+      { id: "party2_address_city", label: "Party 2 city", type: "text", required: true },
+      { id: "party2_address_state", label: "Party 2 state", type: "text", required: true },
+      { id: "party2_address_zip", label: "Party 2 zip code", type: "text", required: true },
       { id: "party2_ssn", label: "Party 2 SSN", type: "text", required: true, sensitive: true, placeholder: "xxx-xx-xxxx" },
       { id: "party2_dob", label: "Party 2 date of birth", type: "date", required: true },
-      {
-        id: "account_owner",
-        label: "Who owns the retirement account?",
-        type: "radio",
-        required: true,
-        options: ["Party 1", "Party 2"]
-      }
     ]
   },
   {
@@ -92,37 +155,156 @@ export const intakeSteps: IntakeStep[] = [
         type: "select",
         required: true,
         options: [
-          "I don't know",
-          "Fidelity",
+          "ADP",
+          "Alto",
+          "Athene",
+          "Betterment",
+          "CalSTRS",
+          "Charles Schwab",
+          "DFAS",
+          "DMBA",
           "Empower",
-          "Principal 401k",
+          "FERS",
+          "Fidelity",
+          "IBEW Local 57",
+          "IHC",
+          "Jackson National",
+          "John Hancock",
+          "Kroger",
+          "LPL Financial",
+          "Mass Mutual",
+          "Merrill Lynch",
+          "Milliman",
+          "Mission Square",
+          "Morgan Stanley",
+          "Northwestern Mutual",
+          "PCS",
+          "Principal",
+          "Prudential",
+          "TIAA",
+          "T.RowePrice",
+          "Transamerica",
           "TSP",
           "URS",
-          "DMBA",
-          "IHC",
-          "Multi-template / other"
+          "USAF",
+          "Vanguard",
+          "Walmart",
+          "Wells Fargo",
+          "Western Conference of Teamsters",
+          "Other"
         ]
       },
       {
-        id: "formal_plan_name",
-        label: "Formal plan name",
+        id: "account_type",
+        label: "What kind of account is this?",
+        type: "select",
+        required: true,
+        fullWidth: true,
+        constrained: true,
+        helpWhen: {
+          field: "account_type",
+          values: ["IRA SEP", "IRA Roth", "IRA Traditional"],
+          text: "Please check with your plan administrator to find out if you really need a QDRO. Most IRAs do not need a QDRO unless they are bundled with a qualified account that does. For example, URS may divide IRAs in a QDRO when also dividing a 401k account."
+        },
+        options: [
+          "401k plan",
+          "403b plan",
+          "457 plan",
+          "Pension",
+          "TSP",
+          "Military pension",
+          "Annuity",
+          "IRA SEP",
+          "IRA Roth",
+          "IRA Traditional",
+          "Other"
+        ]
+      },
+      {
+        id: "has_employer",
+        label: "Is this account associated with an employer?",
+        type: "radio",
+        required: true,
+        options: ["Yes", "No"]
+      },
+      {
+        id: "employer_name",
+        label: "Employer name",
         type: "text",
         required: true,
-        help: "Usually shown on the retirement account statement. If unsure, choose I don't know."
+        conditional: { field: "has_employer", equals: "Yes" }
       },
       {
-        id: "is_ira",
-        label: "Are you trying to divide an IRA?",
+        id: "employer_phone",
+        label: "Employer phone",
+        type: "phone",
+        required: true,
+        conditional: { field: "has_employer", equals: "Yes" }
+      },
+      {
+        id: "employer_address_street",
+        label: "Employer street address",
+        type: "text",
+        required: true,
+        conditional: { field: "has_employer", equals: "Yes" }
+      },
+      {
+        id: "employer_address_line2",
+        label: "Employer address line 2",
+        type: "text",
+        conditional: { field: "has_employer", equals: "Yes" }
+      },
+      {
+        id: "employer_address_city",
+        label: "Employer city",
+        type: "text",
+        required: true,
+        conditional: { field: "has_employer", equals: "Yes" }
+      },
+      {
+        id: "employer_address_state",
+        label: "Employer state",
+        type: "text",
+        required: true,
+        conditional: { field: "has_employer", equals: "Yes" }
+      },
+      {
+        id: "employer_address_zip",
+        label: "Employer zip code",
+        type: "text",
+        required: true,
+        conditional: { field: "has_employer", equals: "Yes" }
+      },
+      {
+        id: "employer_fax",
+        label: "Employer fax",
+        type: "phone",
+        conditional: { field: "has_employer", equals: "Yes" }
+      },
+      {
+        id: "employer_email",
+        label: "Employer email",
+        type: "email",
+        conditional: { field: "has_employer", equals: "Yes" }
+      },
+      {
+        id: "account_owner",
+        label: "Which party is the current owner of the retirement account?",
         type: "radio",
         required: true,
-        options: ["No", "Yes"]
+        options: ["Party 1 (First person named in your case)", "Party 2 (Second person named in your case)"]
       },
       {
-        id: "ira_admin_confirmed",
-        label: "Has the IRA administrator confirmed they require a QDRO?",
-        type: "radio",
-        options: ["No", "Yes"],
-        conditional: { field: "is_ira", equals: "Yes" }
+        id: "formal_plan_name",
+        label: "What is the formal name of the plan we are dividing?",
+        type: "text",
+        required: true
+      },
+      {
+        id: "plan_account_number",
+        label: "Contract number or account number associated with this plan, if one is on the statement",
+        type: "text",
+        required: false
       }
     ]
   },
@@ -154,24 +336,29 @@ export const intakeSteps: IntakeStep[] = [
         id: "valuation_date",
         label: "Valuation date",
         type: "date",
+        fullWidth: true,
+        constrained: true,
         help: "Often the divorce date unless your decree says something different."
       },
       {
-        id: "special_terms",
-        label: "Special terms from the decree",
-        type: "textarea",
-        placeholder: "Loans, gains/losses, survivor benefits, or anything unusual"
+        id: "account_awardee",
+        label: "Which party is being awarded some or all of this retirement account?",
+        type: "radio",
+        required: true,
+        options: ["Party 1 (First person named in your case)", "Party 2 (Second person named in your case)"]
+      },
+      {
+        id: "market_adjustment",
+        label: "Interest, gains, and losses",
+        type: "radio",
+        required: true,
+        help: "Choose how interest, gains, and losses should be treated based on the divorce decree.",
+        options: [
+          "The decree says interest, gains, and losses are included",
+          "The decree says interest, gains, and losses are excluded",
+          "The decree does not say anything about interest, gains, or losses"
+        ]
       }
-    ]
-  },
-  {
-    id: "uploads",
-    title: "Uploads",
-    description: "Upload the documents needed before drafting can begin.",
-    fields: [
-      { id: "signed_decree", label: "Signed divorce decree", type: "file", required: true, help: "PDF preferred." },
-      { id: "account_statement", label: "Retirement account statement", type: "file", required: true, help: "PDF or image accepted." },
-      { id: "additional_documents", label: "Additional documents", type: "file" }
     ]
   }
 ];
@@ -246,24 +433,40 @@ export const demoRequest: QdroRequest = {
     party1_name: "Jordan Client",
     party1_email: "client@example.com",
     party1_phone: "801-555-0100",
-    party1_address: "1145 S 800 E, Orem, UT 84097",
+    party1_address_street: "1145 S 800 E",
+    party1_address_city: "Orem",
+    party1_address_state: "UT",
+    party1_address_zip: "84097",
     party1_ssn: "111-22-3333",
     party1_dob: "1983-04-15",
     party2_name: "Taylor Former",
     party2_email: "other@example.com",
     party2_phone: "801-555-0188",
-    party2_address: "3915 Timpview Dr., Provo, UT 84604",
+    party2_address_street: "3915 Timpview Dr.",
+    party2_address_city: "Provo",
+    party2_address_state: "UT",
+    party2_address_zip: "84604",
     party2_ssn: "444-55-6666",
     party2_dob: "1981-02-20",
-    account_owner: "Party 1",
+    account_owner: "Party 1 (First person named in your case)",
     plan_family: "Fidelity",
     entity_name: "Acme Industries",
-    account_type: "401(k)",
+    account_type: "401k plan",
+    has_employer: "Yes",
     employer_name: "Acme Industries",
+    employer_phone: "801-555-0199",
+    employer_address_street: "2400 Innovation Pkwy",
+    employer_address_city: "Lehi",
+    employer_address_state: "UT",
+    employer_address_zip: "84043",
+    employer_fax: "801-555-0198",
+    employer_email: "benefits@example.com",
     formal_plan_name: "Acme Industries 401(k) Plan",
-    market_adjustment: "Yes",
+    plan_account_number: "ABC-12345",
+    market_adjustment: "The decree says interest, gains, and losses are included",
     is_ira: "No",
     division_type: "Percentage",
+    account_awardee: "Party 2 (Second person named in your case)",
     percent_award: "50",
     valuation_date: "2026-08-12",
     special_terms: "Divide gains and losses from the valuation date through segregation."

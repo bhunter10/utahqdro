@@ -32,13 +32,22 @@ export type ConditionalRule = {
   equals: string;
 };
 
+export type ConditionalHelp = {
+  field: string;
+  values: string[];
+  text: string;
+};
+
 export type IntakeField = {
   id: string;
   label: string;
   type: FieldType;
   help?: string;
+  helpWhen?: ConditionalHelp;
   placeholder?: string;
   required?: boolean;
+  fullWidth?: boolean;
+  constrained?: boolean;
   sensitive?: boolean;
   options?: string[];
   conditional?: ConditionalRule;
@@ -58,6 +67,7 @@ export type RequestFile = {
   fileName: string;
   status: "missing" | "uploaded" | "generated" | "signed";
   url?: string;
+  storagePath?: string;
 };
 
 export type RequestNote = {

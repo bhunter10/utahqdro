@@ -10,7 +10,8 @@ function value(fields: QdroRequest["fields"], key: string) {
 
 export function deriveDocumentData(request: QdroRequest, maskSensitive = false) {
   const court = findUtahCourt(value(request.fields, "court_location"));
-  const owner = value(request.fields, "account_owner");
+  const owner = normalizePartyChoice(value(request.fields, "account_owner")) || "Party 1";
+  const awardee = normalizePartyChoice(value(request.fields, "account_awardee")) || (owner === "Party 2" ? "Party 1" : "Party 2");
   const party1Name = value(request.fields, "party1_name");
   const party2Name = value(request.fields, "party2_name");
   const party1 = {
@@ -19,7 +20,7 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     dob: value(request.fields, "party1_dob"),
     email: value(request.fields, "party1_email"),
     phone: value(request.fields, "party1_phone"),
-    address: value(request.fields, "party1_address")
+    address: formatMailingAddress(request.fields, "party1")
   };
   const party2 = {
     name: party2Name,
@@ -27,10 +28,10 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     dob: value(request.fields, "party2_dob"),
     email: value(request.fields, "party2_email"),
     phone: value(request.fields, "party2_phone"),
-    address: value(request.fields, "party2_address")
+    address: formatMailingAddress(request.fields, "party2")
   };
   const participant = owner === "Party 2" ? party2 : party1;
-  const alternate = owner === "Party 2" ? party1 : party2;
+  const alternate = awardee === "Party 2" ? party2 : party1;
   const divisionType = value(request.fields, "division_type");
   const percentAward = value(request.fields, "percent_award");
   const fixedAward = value(request.fields, "fixed_award");
@@ -59,7 +60,12 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     entity_account_type: entityAccountType,
     account_type: value(request.fields, "account_type"),
     employer_name: value(request.fields, "employer_name") || "to be confirmed",
+    employer_phone: value(request.fields, "employer_phone"),
+    employer_full_address: formatMailingAddress(request.fields, "employer"),
+    employer_fax: value(request.fields, "employer_fax"),
+    employer_email: value(request.fields, "employer_email"),
     formal_plan_name: value(request.fields, "formal_plan_name"),
+    plan_account_number: value(request.fields, "plan_account_number"),
     participant_name: participant.name,
     participant_full_address: participant.address || "address to be confirmed",
     participant_ssn: maskSensitive ? maskSsn(participant.ssn) : participant.ssn,
@@ -75,9 +81,21 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     award_text: awardText,
     percent_amount: divisionType === "Fixed amount" && fixedAward ? formatCurrencyValue(fixedAward) : `${percentAward || "50"}%`,
     valuation_date: formatDisplayDate(value(request.fields, "valuation_date")) || "the Date of Transfer",
-    adjust_market: value(request.fields, "market_adjustment").toLowerCase() === "no" ? "is not" : "is",
+    adjust_market: getMarketAdjustmentText(value(request.fields, "market_adjustment")),
     special_terms: value(request.fields, "special_terms") || "None stated."
   };
+}
+
+function normalizePartyChoice(choice: string) {
+  if (choice.startsWith("Party 1")) return "Party 1";
+  if (choice.startsWith("Party 2")) return "Party 2";
+  return choice === "Party 1" || choice === "Party 2" ? choice : "";
+}
+
+function getMarketAdjustmentText(adjustment: string) {
+  const normalized = adjustment.toLowerCase();
+  if (normalized.includes("excluded") || normalized === "no") return "is not";
+  return "is";
 }
 
 function formatCurrencyValue(amount: string) {
@@ -88,6 +106,20 @@ function formatCurrencyValue(amount: string) {
     currency: "USD",
     maximumFractionDigits: 2
   }).format(numericAmount);
+}
+
+function formatMailingAddress(fields: QdroRequest["fields"], prefix: "party1" | "party2" | "employer") {
+  const cityStateZip = [
+    value(fields, `${prefix}_address_city`),
+    [value(fields, `${prefix}_address_state`), value(fields, `${prefix}_address_zip`)].filter(Boolean).join(" ")
+  ].filter(Boolean).join(", ");
+  const structuredAddress = [
+    value(fields, `${prefix}_address_street`),
+    value(fields, `${prefix}_address_line2`),
+    cityStateZip
+  ].filter(Boolean).join(", ");
+
+  return structuredAddress || value(fields, `${prefix}_address`);
 }
 
 export function maskSsn(ssn: string) {
@@ -190,6 +222,9 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
     ? normalizedBody
     : `<div class="document-body" style="margin-top: 18pt; margin-bottom: 18pt; color: #000000;">${normalizedBody}</div>`;
   const captionTableMargin = options.wrapBody === false ? " margin: 0 0 12pt;" : "";
+  const afterCaptionSpacer = options.wrapBody === false
+    ? `<p style="margin: 0 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000;">&nbsp;</p>`
+    : "";
 
   return `<p style="margin: 0 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000;">David J. Hunter (9015)<br />
     3915 Timpview Dr., Provo, UT 84604<br />
@@ -251,7 +286,7 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
         </td>
       </tr>
     </tbody>
-  </table>${bodySection}<table class="signature-block" style="width: 100%; border-collapse: collapse; table-layout: fixed; border: none; margin-top: 24pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
+  </table>${afterCaptionSpacer}${bodySection}<table class="signature-block" style="width: 100%; border-collapse: collapse; table-layout: fixed; border: none; margin-top: 24pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
     <colgroup>
       <col style="width: 50%;" />
       <col style="width: 50%;" />

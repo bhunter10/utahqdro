@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAdminUser } from "@/lib/admin-access";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import type { DocumentTemplate } from "@/lib/types";
 
@@ -123,11 +124,8 @@ async function requireAdmin(req: Request): Promise<
     };
   }
 
-  if (decoded.role === "admin") return { ok: true, uid: decoded.uid };
-
   try {
-    const profile = await db.collection("users").doc(decoded.uid).get();
-    if (profile.data()?.role === "admin") return { ok: true, uid: decoded.uid };
+    if (await isAdminUser(decoded, db)) return { ok: true, uid: decoded.uid };
   } catch (error) {
     return {
       ok: false,

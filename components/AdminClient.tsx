@@ -2,16 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { normalizeAiFieldValue } from "@/lib/ai-intake";
 import { intakeSteps, sampleRequests, statuses } from "@/lib/content";
 import { getEditableTemplateBody } from "@/lib/document-engine";
+import { formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
 import { auth, missingFirebaseConfig } from "@/lib/firebase";
-import type { DocumentTemplate, IntakeField, QdroRequest, RequestStatus } from "@/lib/types";
+import type { DocumentTemplate, IntakeField, QdroRequest, RequestFile, RequestStatus } from "@/lib/types";
 import { findUtahCourt } from "@/lib/utah-courts";
 import { DocumentPreview } from "./DocumentPreview";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 
 const derivedRequestFieldIds = new Set(["court_county", "district"]);
 type AdminTab = "requests" | "fields" | "templates";
+type AdminAccessState = "checking" | "allowed" | "denied";
 
 export function AdminClient({ initialTab = "requests", mode = "workspace" }: { initialTab?: AdminTab; mode?: "login" | "workspace" }) {
   const router = useRouter();
@@ -23,6 +26,7 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
   const [adminPassword, setAdminPassword] = useState("");
   const [adminAuthMessage, setAdminAuthMessage] = useState("");
   const [isAdminAuthSubmitting, setIsAdminAuthSubmitting] = useState(false);
+  const [adminAccess, setAdminAccess] = useState<AdminAccessState>("checking");
   const [templateStatus, setTemplateStatus] = useState("");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -54,8 +58,17 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
           router.replace("/admin/requests");
           return;
         }
-        void loadTemplates();
+        setAdminAccess("checking");
+        void loadRequests().then((hasAccess) => {
+          if (!hasAccess) {
+            setAdminAccess("denied");
+            return;
+          }
+          setAdminAccess("allowed");
+          void loadTemplates();
+        });
       } else {
+        setAdminAccess("checking");
         setTemplateStatus("Sign in as an admin to load and save database templates.");
         if (!isLoginScreen) {
           router.replace("/admin");
@@ -121,6 +134,33 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
     }
   }
 
+  async function loadRequests() {
+    const token = await getAdminToken();
+    if (!token) return false;
+
+    try {
+      const response = await fetch("/api/admin/requests", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const result = (await response.json()) as { message?: string; requests?: QdroRequest[] };
+      if (!response.ok) {
+        setTemplateStatus(result.message || "Could not load database requests.");
+        return false;
+      }
+      if (!result.requests?.length) {
+        setTemplateStatus(result.message || "No database requests found yet. Showing demo requests.");
+        return true;
+      }
+
+      setRequests(mergeRequests(result.requests, sampleRequests));
+      setTemplateStatus(`Loaded ${result.requests.length} database request${result.requests.length === 1 ? "" : "s"}.`);
+      return true;
+    } catch (error) {
+      setTemplateStatus(error instanceof Error ? error.message : "Could not load database requests.");
+      return false;
+    }
+  }
+
   function updateStatus(requestId: string, status: RequestStatus) {
     setRequests((current) =>
       current.map((request) =>
@@ -163,6 +203,73 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
     );
   }
 
+  async function deleteRequest(requestId: string) {
+    const token = await getAdminToken();
+    if (!token) {
+      setTemplateStatus("Sign in as an admin to delete requests.");
+      return false;
+    }
+
+    try {
+      const response = await fetch("/api/admin/requests", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ requestId })
+      });
+      const result = (await response.json()) as { message?: string };
+      if (!response.ok) {
+        setTemplateStatus(result.message || "Could not delete request.");
+        return false;
+      }
+
+      setRequests((current) => current.filter((request) => request.id !== requestId));
+      setSelectedId(null);
+      setTemplateStatus(result.message || "Request deleted.");
+      return true;
+    } catch (error) {
+      setTemplateStatus(error instanceof Error ? error.message : "Could not delete request.");
+      return false;
+    }
+  }
+
+  async function openUploadedFile(requestId: string, file: RequestFile) {
+    const fileWindow = window.open("", "_blank", "noopener,noreferrer");
+    writeFileWindowMessage(fileWindow, "Opening uploaded file...");
+
+    const token = await getAdminToken();
+    if (!token) {
+      setTemplateStatus("Sign in as an admin to open uploaded files.");
+      writeFileWindowMessage(fileWindow, "Sign in as an admin to open uploaded files.");
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams({ requestId, fileId: file.id });
+      const response = await fetch(`/api/admin/request-file?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const result = (await response.json()) as { message?: string; url?: string };
+      if (!response.ok || !result.url) {
+        setTemplateStatus(result.message || "Could not open uploaded file.");
+        writeFileWindowMessage(fileWindow, result.message || "Could not open uploaded file.");
+        return;
+      }
+
+      if (fileWindow) {
+        fileWindow.location.href = result.url;
+      } else {
+        window.location.href = result.url;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not open uploaded file.";
+      setTemplateStatus(message);
+      writeFileWindowMessage(fileWindow, message);
+    }
+  }
+
   function navigateToTab(nextTab: AdminTab) {
     setTab(nextTab);
     router.push(`/admin/${nextTab}`);
@@ -198,7 +305,9 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
       {!isLoginScreen && (
         <section className="admin-auth-panel">
           <div>
-            <span className={`status ${adminUser ? "info" : "warn"}`}>{adminUser ? "Admin signed in" : "Checking admin"}</span>
+            <span className={`status ${adminAccess === "allowed" ? "info" : "warn"}`}>
+              {adminAccess === "allowed" ? "Admin signed in" : adminAccess === "denied" ? "Access denied" : "Checking admin"}
+            </span>
             <p>{adminUser ? `Signed in as ${adminUser.email || adminUser.uid}.` : "Checking admin access..."}</p>
           </div>
           {adminUser && (
@@ -259,6 +368,32 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
             </section>
           </section>
         </main>
+      ) : adminAccess === "checking" ? (
+        <main className="page">
+          <section className="section admin-shell">
+            <section className="panel">
+              <span className="status info">Checking admin access</span>
+              <h1 style={{ marginTop: 12 }}>Verifying permissions.</h1>
+              <p className="lead">One moment while the admin workspace checks this account.</p>
+            </section>
+          </section>
+        </main>
+      ) : adminAccess === "denied" ? (
+        <main className="page">
+          <section className="section admin-shell">
+            <section className="panel">
+              <span className="status warn">Access denied</span>
+              <h1 style={{ marginTop: 12 }}>This account is not an admin.</h1>
+              <p className="lead">Sign in with an admin account to manage requests, fields, notes, statuses, and templates.</p>
+              {templateStatus && <p className="template-save-status">{templateStatus}</p>}
+              <div className="toolbar">
+                <button className="button secondary" type="button" onClick={() => void handleAdminSignOut()}>
+                  Sign out
+                </button>
+              </div>
+            </section>
+          </section>
+        </main>
       ) : (
       <main className="page">
         <section className="section admin-shell">
@@ -307,8 +442,9 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
                 <thead>
                   <tr>
                     <th>Status</th>
-                    <th>Name</th>
-                    <th>Entity Type</th>
+                    <th>Client Name</th>
+                    <th>Entity</th>
+                    <th>TYPE</th>
                     <th>Created</th>
                     <th>Updated</th>
                     <th>Edit</th>
@@ -327,6 +463,7 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
                         <small>{request.clientEmail}</small>
                       </td>
                       <td>{getEntityType(request)}</td>
+                      <td>{getAccountType(request)}</td>
                       <td>{formatDate(request.createdAt)}</td>
                       <td>{formatDate(request.updatedAt)}</td>
                       <td>
@@ -420,6 +557,8 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
             updateStatus={updateStatus}
             updateField={updateField}
             updateInternalNotes={updateInternalNotes}
+            deleteRequest={deleteRequest}
+            openUploadedFile={openUploadedFile}
             onClose={() => setSelectedId(null)}
           />
         )}
@@ -527,6 +666,8 @@ function RequestDetailModal({
   updateStatus,
   updateField,
   updateInternalNotes,
+  deleteRequest,
+  openUploadedFile,
   onClose
 }: {
   request: QdroRequest;
@@ -534,6 +675,8 @@ function RequestDetailModal({
   updateStatus: (id: string, status: RequestStatus) => void;
   updateField: (id: string, field: string, value: string) => void;
   updateInternalNotes: (id: string, body: string) => void;
+  deleteRequest: (id: string) => Promise<boolean>;
+  openUploadedFile: (requestId: string, file: RequestFile) => Promise<void>;
   onClose: () => void;
 }) {
   const [showPreview, setShowPreview] = useState(false);
@@ -575,6 +718,8 @@ function RequestDetailModal({
             updateStatus={updateStatus}
             updateField={updateField}
             updateInternalNotes={updateInternalNotes}
+            deleteRequest={deleteRequest}
+            openUploadedFile={openUploadedFile}
           />
         </div>
       </section>
@@ -586,12 +731,16 @@ function RequestEditor({
   request,
   updateStatus,
   updateField,
-  updateInternalNotes
+  updateInternalNotes,
+  deleteRequest,
+  openUploadedFile
 }: {
   request: QdroRequest;
   updateStatus: (id: string, status: RequestStatus) => void;
   updateField: (id: string, field: string, value: string) => void;
   updateInternalNotes: (id: string, body: string) => void;
+  deleteRequest: (id: string) => Promise<boolean>;
+  openUploadedFile: (requestId: string, file: RequestFile) => Promise<void>;
 }) {
   const schemaFieldIds = new Set(intakeSteps.flatMap((step) => step.fields.map((field) => field.id)));
   const extraFields = Object.entries(request.fields).filter(
@@ -612,15 +761,39 @@ function RequestEditor({
           </select>
         </div>
         <InternalNotes request={request} updateInternalNotes={updateInternalNotes} />
+        {request.files.length > 0 && (
+          <section className="admin-intake-step">
+            <div>
+              <span className="status info">Uploaded documents</span>
+              <p>Files saved with this request.</p>
+            </div>
+            <div className="ai-file-list">
+              {request.files.map((file) => (
+                <article className="mini-check" key={file.id}>
+                  <span className="icon">✓</span>
+                  <span>
+                    <strong>{file.label}</strong>
+                    <small style={{ display: "block", color: "var(--muted)" }}>{file.fileName}</small>
+                    {(file.storagePath || file.url) && (
+                      <button className="muted-link inline-button" type="button" onClick={() => openUploadedFile(request.id, file)}>
+                        Open uploaded file
+                      </button>
+                    )}
+                  </span>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
         <div className="admin-intake-sections">
-          {intakeSteps.map((step) => {
+          {intakeSteps.filter((step) => step.id !== "uploads").map((step) => {
             const visibleFields = step.fields.filter((field) => isAdminFieldVisible(field, request.fields));
 
             return (
               <section className="admin-intake-step" key={step.id}>
                 <div>
                   <span className="status info">{step.title}</span>
-                  <p>{step.description}</p>
+                  {step.description && <p>{step.description}</p>}
                 </div>
                 {step.id === "parties" ? (
                   <AdminPartyFieldGroups fields={visibleFields} request={request} updateField={updateField} />
@@ -662,7 +835,15 @@ function RequestEditor({
           )}
         </div>
         <div className="toolbar">
-          <button className="button danger" type="button">
+          <button
+            className="button danger"
+            type="button"
+            onClick={() => {
+              if (window.confirm("Delete this request and its uploaded files?")) {
+                void deleteRequest(request.id);
+              }
+            }}
+          >
             Delete request
           </button>
         </div>
@@ -681,23 +862,36 @@ function AdminFieldControl({
   updateField: (id: string, field: string, value: string) => void;
 }) {
   const inputId = `admin-field-${field.id}`;
+  const isSsnField = isSsnFieldId(field.id);
+  const isPhoneField = field.type === "phone";
   const value = request.fields[field.id];
-  const stringValue = typeof value === "string" ? value : "";
+  const rawValue = typeof value === "string" ? value : "";
+  const stringValue = isSsnField
+    ? formatSsnInput(rawValue)
+    : isPhoneField
+      ? formatPhoneInput(rawValue)
+      : field.type === "date"
+        ? normalizeAiFieldValue(field, rawValue)
+        : rawValue;
   const common = {
     id: inputId,
     name: field.id,
     value: stringValue,
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-      updateField(request.id, field.id, event.target.value)
+      updateField(request.id, field.id, isSsnField ? formatSsnInput(event.target.value) : isPhoneField ? formatPhoneInput(event.target.value) : event.target.value)
   };
+  const conditionalHelp = getConditionalHelp(field, request.fields);
+  const fieldClassName = ["field", field.fullWidth ? "full-field" : "", field.constrained ? "constrained-field" : ""].filter(Boolean).join(" ");
+  const options = getAdminFieldOptions(field);
 
   if (field.type === "radio") {
     return (
-      <fieldset className="field">
+      <fieldset className="field full-field radio-field">
         <legend>{field.label}</legend>
         {field.help && <small>{field.help}</small>}
+        {conditionalHelp && <small>{conditionalHelp}</small>}
         <div className="choice-row">
-          {field.options?.map((option) => (
+          {options.map((option) => (
             <label className="choice" key={option}>
               <input
                 type="radio"
@@ -715,12 +909,13 @@ function AdminFieldControl({
 
   if (field.type === "select") {
     return (
-      <div className="field">
+      <div className={fieldClassName}>
         <label htmlFor={inputId}>{field.label}</label>
         {field.help && <small>{field.help}</small>}
+        {conditionalHelp && <small>{conditionalHelp}</small>}
         <select className="select" {...common}>
           <option value="">Choose one</option>
-          {field.options?.map((option) => (
+          {options.map((option) => (
             <option value={option} key={option}>
               {option}
             </option>
@@ -735,6 +930,7 @@ function AdminFieldControl({
       <div className="field full-field">
         <label htmlFor={inputId}>{field.label}</label>
         {field.help && <small>{field.help}</small>}
+        {conditionalHelp && <small>{conditionalHelp}</small>}
         <textarea className="textarea" {...common} placeholder={field.placeholder} />
       </div>
     );
@@ -745,6 +941,7 @@ function AdminFieldControl({
       <div className="field">
         <label htmlFor={inputId}>{field.label}</label>
         {field.help && <small>{field.help}</small>}
+        {conditionalHelp && <small>{conditionalHelp}</small>}
         <input
           className="input"
           id={inputId}
@@ -756,13 +953,33 @@ function AdminFieldControl({
     );
   }
 
-  const type = field.type === "email" ? "email" : field.type === "date" ? "date" : field.type === "phone" ? "tel" : "text";
+  const type =
+    isSsnField
+      ? "text"
+      : field.type === "email"
+      ? "email"
+      : field.type === "date"
+        ? "date"
+        : field.type === "phone"
+          ? "tel"
+          : field.type === "currency" || field.type === "percent"
+            ? "number"
+            : "text";
 
   return (
-    <div className="field">
+    <div className={fieldClassName}>
       <label htmlFor={inputId}>{field.label}</label>
       {field.help && <small>{field.help}</small>}
-      <input className="input" {...common} type={type} placeholder={field.placeholder} />
+      {conditionalHelp && <small>{conditionalHelp}</small>}
+      <input
+        className="input"
+        {...common}
+        type={type}
+        inputMode={isSsnField || isPhoneField ? "numeric" : undefined}
+        pattern={isSsnField || isPhoneField ? "[0-9() -]*" : undefined}
+        maxLength={isSsnField ? 11 : isPhoneField ? 14 : undefined}
+        placeholder={field.placeholder}
+      />
     </div>
   );
 }
@@ -782,6 +999,13 @@ function AdminPartyFieldGroups({
 
   return (
     <div className="party-field-groups">
+      {remainingFields.length > 0 && (
+        <div className="field-grid">
+          {remainingFields.map((field) => (
+            <AdminFieldControl field={field} key={field.id} request={request} updateField={updateField} />
+          ))}
+        </div>
+      )}
       <section className="party-field-group">
         <div className="party-field-group-head">
           <span className="status info">Party 1</span>
@@ -802,13 +1026,6 @@ function AdminPartyFieldGroups({
           ))}
         </div>
       </section>
-      {remainingFields.length > 0 && (
-        <div className="field-grid">
-          {remainingFields.map((field) => (
-            <AdminFieldControl field={field} key={field.id} request={request} updateField={updateField} />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -844,6 +1061,20 @@ function InternalNotes({
 function isAdminFieldVisible(field: IntakeField, data: QdroRequest["fields"]) {
   if (!field.conditional) return true;
   return data[field.conditional.field] === field.conditional.equals;
+}
+
+function getConditionalHelp(field: IntakeField, data: QdroRequest["fields"]) {
+  if (!field.helpWhen) return "";
+  const value = data[field.helpWhen.field];
+  return typeof value === "string" && field.helpWhen.values.includes(value) ? field.helpWhen.text : "";
+}
+
+function getAdminFieldOptions(field: IntakeField) {
+  if (field.id === "division_type") {
+    return (field.options || []).filter((option) => option !== "I don't know");
+  }
+
+  return field.options || [];
 }
 
 function getUpdatedRequestFields(fields: QdroRequest["fields"], field: string, valueToSave: string) {
@@ -897,6 +1128,36 @@ function humanizeFieldId(field: string) {
 
 function getEntityType(request: QdroRequest) {
   return String(request.fields.plan_family || request.templateFamily || "QDRO");
+}
+
+function getAccountType(request: QdroRequest) {
+  return String(request.fields.account_type || "—");
+}
+
+function mergeRequests(primary: QdroRequest[], fallback: QdroRequest[]) {
+  const seen = new Set<string>();
+  return [...primary, ...fallback].filter((request) => {
+    if (seen.has(request.id)) return false;
+    seen.add(request.id);
+    return true;
+  });
+}
+
+function writeFileWindowMessage(fileWindow: Window | null, message: string) {
+  fileWindow?.document.open();
+  fileWindow?.document.write(
+    `<p style="font-family: system-ui, sans-serif; padding: 24px; line-height: 1.5;">${escapeHtml(message)}</p>`
+  );
+  fileWindow?.document.close();
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function getRequestTotal(request: QdroRequest) {
