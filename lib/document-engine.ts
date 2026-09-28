@@ -1,4 +1,5 @@
 import { documentTemplates } from "./content";
+import { formatLongDate } from "./field-format";
 import type { DocumentTemplate, QdroRequest } from "./types";
 import { findUtahCourt } from "./utah-courts";
 
@@ -51,8 +52,8 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     district: (court?.district || value(request.fields, "district") || "FOURTH").toUpperCase(),
     court_county: (court?.county || value(request.fields, "court_county")).toUpperCase(),
     judge_name: value(request.fields, "judge_name"),
-    marriage_date: formatDisplayDate(value(request.fields, "marriage_date")),
-    divorce_date: value(request.fields, "divorce_date"),
+    marriage_date: formatLongDate(value(request.fields, "marriage_date")),
+    divorce_date: formatLongDate(value(request.fields, "divorce_date")),
     order_title: `${amendedText ? `${amendedText} ` : ""}QUALIFIED DOMESTIC RELATIONS ORDER`,
     counsel_for: value(request.fields, "prepared_for") || request.clientName,
     party1_name_upper: party1Name.toUpperCase(),
@@ -80,7 +81,7 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     alternate_payee_email: alternate.email,
     award_text: awardText,
     percent_amount: divisionType === "Fixed amount" && fixedAward ? formatCurrencyValue(fixedAward) : `${percentAward || "50"}%`,
-    valuation_date: formatDisplayDate(value(request.fields, "valuation_date")) || "the Date of Transfer",
+    valuation_date: formatLongDate(value(request.fields, "valuation_date")) || "the Date of Transfer",
     adjust_market: getMarketAdjustmentText(value(request.fields, "market_adjustment")),
     special_terms: value(request.fields, "special_terms") || "None stated."
   };
@@ -141,13 +142,21 @@ export function selectTemplateFromList(request: QdroRequest, templates: Document
   );
 }
 
-export function renderTemplate(template: DocumentTemplate, request: QdroRequest, maskSensitive = false) {
+type RenderDocumentOptions = {
+  highlightMergeFields?: boolean;
+  includeTemplateLabel?: boolean;
+  templates?: DocumentTemplate[];
+  wrapDocument?: boolean;
+  wrapBody?: boolean;
+};
+
+export function renderTemplate(template: DocumentTemplate, request: QdroRequest, maskSensitive = false, options: RenderDocumentOptions = {}) {
   const data = deriveDocumentData(request, maskSensitive);
   const source = getEditableTemplateBody(template);
   return source.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => {
     const cleanKey = key.trim() as keyof typeof data;
     const merged = String(data[cleanKey] ?? "");
-    return escapeHtml(merged);
+    return renderMergedValue(merged, options.highlightMergeFields, cleanKey);
   });
 }
 
@@ -161,16 +170,19 @@ export function getEditableTemplateBody(template: DocumentTemplate) {
 export function renderDocumentHtml(
   request: QdroRequest,
   maskSensitive = false,
-  options: { includeTemplateLabel?: boolean; templates?: DocumentTemplate[]; wrapDocument?: boolean; wrapBody?: boolean } = {}
+  options: RenderDocumentOptions = {}
 ) {
   const template = options.templates ? selectTemplateFromList(request, options.templates) : selectTemplate(request);
   const data = deriveDocumentData(request, maskSensitive);
-  const rendered = inlineDocumentStyles(renderTemplate(template, request, maskSensitive));
+  const rendered = inlineDocumentStyles(renderTemplate(template, request, maskSensitive, options));
   const templateLabel = options.includeTemplateLabel === false
     ? ""
     : `<div style="margin: 0 0 12pt; color: #64748b; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;">${escapeHtml(template.name)} · configurable template v${template.version}</div>`;
 
-  const documentBody = `${templateLabel}${renderCommonDocumentShell(rendered, data, { wrapBody: options.wrapBody !== false })}`;
+  const documentBody = `${templateLabel}${renderCommonDocumentShell(rendered, data, {
+    highlightMergeFields: options.highlightMergeFields,
+    wrapBody: options.wrapBody !== false
+  })}`;
   if (options.wrapDocument === false) return documentBody;
 
   return `<article style="max-width: 8.5in; margin: 0 auto; color: #000000; font-family: Times New Roman; font-size: 12pt; line-height: 14pt;">${documentBody}</article>`;
@@ -216,7 +228,7 @@ function plainTextToTemplateHtml(source: string) {
     .join("\n");
 }
 
-function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof deriveDocumentData>, options: { wrapBody?: boolean } = {}) {
+function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof deriveDocumentData>, options: { highlightMergeFields?: boolean; wrapBody?: boolean } = {}) {
   const normalizedBody = normalizeDocumentBodyHtml(bodyHtml).trim();
   const bodySection = options.wrapBody === false
     ? normalizedBody
@@ -225,18 +237,19 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
   const afterCaptionSpacer = options.wrapBody === false
     ? `<p style="margin: 0 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000;">&nbsp;</p>`
     : "";
+  const merge = (key: keyof typeof data) => renderMergedValue(String(data[key] ?? ""), options.highlightMergeFields, key);
 
   return `<p style="margin: 0 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000;">David J. Hunter (9015)<br />
     3915 Timpview Dr., Provo, UT 84604<br />
     801-473-4444 dave@utahmediations.com<br />
     <br />
-    <em>Counsel for ${escapeHtml(data.counsel_for)}</em>
+    <em>Counsel for ${merge("counsel_for")}</em>
   </p>
 
   <table cellpadding="0" cellspacing="0" style="border-collapse: collapse; border: none; margin: 12pt 0; width: 100%; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
     <tbody>
       <tr>
-        <td style="border: none; padding: 0; text-align: center; text-transform: uppercase;">IN THE ${escapeHtml(data.district)} JUDICIAL DISTRICT COURT IN AND FOR ${escapeHtml(data.court_county)} COUNTY</td>
+        <td style="border: none; padding: 0; text-align: center; text-transform: uppercase;">IN THE ${merge("district")} JUDICIAL DISTRICT COURT IN AND FOR ${merge("court_county")} COUNTY</td>
       </tr>
       <tr>
         <td style="border: none; padding: 0; text-align: center; text-transform: uppercase;">STATE OF UTAH</td>
@@ -258,10 +271,10 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
                 <td style="border: none; padding: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">In the Matter of the Marriage of</td>
               </tr>
               <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${escapeHtml(data.party1_name_upper)}, and</td>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("party1_name_upper")}, and</td>
               </tr>
               <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${escapeHtml(data.party2_name_upper)}.</td>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("party2_name_upper")}.</td>
               </tr>
             </tbody>
           </table>
@@ -270,16 +283,16 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
           <table cellpadding="0" cellspacing="0" style="width: 100%; padding-left: 12pt; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
             <tbody>
               <tr>
-                <td style="border: none; padding: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${escapeHtml(data.order_title)}</td>
+                <td style="border: none; padding: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("order_title")}</td>
               </tr>
               <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Re: ${escapeHtml(data.entity_account_type)}</td>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Re: ${merge("entity_account_type")}</td>
               </tr>
               <tr>
-                <td style="border: none; padding: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Case No. ${escapeHtml(data.case_number)}</td>
+                <td style="border: none; padding: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Case No. ${merge("case_number")}</td>
               </tr>
               <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Judge ${escapeHtml(data.judge_name)}</td>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Judge ${merge("judge_name")}</td>
               </tr>
             </tbody>
           </table>
@@ -315,7 +328,7 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
                 <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; color: #000000;">________________________________</td>
               </tr>
               <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; color: #000000;">${escapeHtml(data.participant_name)}, Participant,</td>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; color: #000000;">${merge("participant_name")}, Participant,</td>
               </tr>
               <tr>
                 <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">(Signed Electronically)</td>
@@ -347,7 +360,7 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
                 <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">________________________________</td>
               </tr>
               <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${escapeHtml(data.alternate_payee_name)}, Alternate Payee,</td>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("alternate_payee_name")}, Alternate Payee,</td>
               </tr>
               <tr>
                 <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">(Signed Electronically)</td>
@@ -383,6 +396,13 @@ function escapeHtml(valueToEscape: string) {
     .replace(/'/g, "&#039;");
 }
 
+function renderMergedValue(valueToRender: string, highlight = false, mergeTag = "") {
+  const escapedValue = escapeHtml(valueToRender);
+  if (!highlight) return escapedValue;
+  const escapedMergeTag = escapeHtml(mergeTag);
+  return `<mark class="merge-highlight" data-merge-tag="{{${escapedMergeTag}}}" style="background: #fef08a; color: #000000; padding: 0 2px;">${escapedValue || "&nbsp;"}</mark>`;
+}
+
 function stripHtml(valueToStrip: string) {
   return valueToStrip
     .replace(/<br\s*\/?>/gi, "\n")
@@ -394,15 +414,4 @@ function stripHtml(valueToStrip: string) {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'");
-}
-
-function formatDisplayDate(valueToFormat: string) {
-  if (!valueToFormat) return "";
-  const date = new Date(`${valueToFormat}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return valueToFormat;
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric"
-  }).format(date);
 }

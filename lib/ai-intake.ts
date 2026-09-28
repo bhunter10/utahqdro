@@ -148,7 +148,7 @@ export function buildAiExtractionPrompt() {
 
   return `Extract QDRO intake answers from the uploaded divorce and retirement account documents.
 
-Return only fields you can infer from the documents. Use these confidence labels:
+Return one entry for each relevant field you can find, infer, or determine is missing from the uploaded documents. Use these confidence labels:
 - found: the document clearly states the answer.
 - review: the answer is inferred, ambiguous, partially visible, or should be confirmed.
 - missing: the field appears relevant but is not in the documents.

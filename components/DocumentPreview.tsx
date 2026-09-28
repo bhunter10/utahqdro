@@ -15,7 +15,10 @@ export function DocumentPreview({
   const [googleDocUrl, setGoogleDocUrl] = useState("");
   const [needsGoogleConnection, setNeedsGoogleConnection] = useState(false);
   const [isCreatingGoogleDoc, setIsCreatingGoogleDoc] = useState(false);
-  const html = useMemo(() => renderDocumentHtml(request, false, { includeTemplateLabel: false, templates }), [request, templates]);
+  const html = useMemo(
+    () => renderDocumentHtml(request, false, { highlightMergeFields: true, includeTemplateLabel: false, templates }),
+    [request, templates]
+  );
 
   async function createGoogleDoc() {
     setIsCreatingGoogleDoc(true);
@@ -48,8 +51,6 @@ export function DocumentPreview({
       <div className="section-head">
         <div>
           <span className="status info">Live preview</span>
-          <h2 style={{ marginTop: 12 }}>Draft document preview</h2>
-          <p>This preview uses the same field data as the export engine.</p>
           {googleDocStatus && (
             <p className="preview-action-status">
               {googleDocStatus} {googleDocUrl && <a className="muted-link" href={googleDocUrl} target="_blank">Open Google Doc</a>}

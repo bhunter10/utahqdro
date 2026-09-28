@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { normalizeAiFieldValue } from "@/lib/ai-intake";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { getRequesterIdentity, normalizeAiFieldValue } from "@/lib/ai-intake";
 import { intakeSteps, sampleRequests, statuses } from "@/lib/content";
 import { getEditableTemplateBody } from "@/lib/document-engine";
 import { formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
@@ -16,9 +16,17 @@ const derivedRequestFieldIds = new Set(["court_county", "district"]);
 type AdminTab = "requests" | "fields" | "templates";
 type AdminAccessState = "checking" | "allowed" | "denied";
 
-export function AdminClient({ initialTab = "requests", mode = "workspace" }: { initialTab?: AdminTab; mode?: "login" | "workspace" }) {
+function adminTabFromPath(pathname: string): AdminTab {
+  if (pathname.startsWith("/admin/fields")) return "fields";
+  if (pathname.startsWith("/admin/templates")) return "templates";
+  return "requests";
+}
+
+export function AdminClient() {
   const router = useRouter();
-  const isLoginScreen = mode === "login";
+  const pathname = usePathname();
+  const isLoginScreen = pathname === "/admin";
+  const tab = adminTabFromPath(pathname);
   const [requests, setRequests] = useState(sampleRequests);
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [adminUser, setAdminUser] = useState<User | null>(null);
@@ -28,22 +36,30 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
   const [isAdminAuthSubmitting, setIsAdminAuthSubmitting] = useState(false);
   const [adminAccess, setAdminAccess] = useState<AdminAccessState>("checking");
   const [templateStatus, setTemplateStatus] = useState("");
+  const [requestStatus, setRequestStatus] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<AdminTab>(initialTab);
+  const [dirtyRequestIds, setDirtyRequestIds] = useState<string[]>([]);
+  const [savingRequestId, setSavingRequestId] = useState("");
 
   const filtered = useMemo(() => {
     const normalized = query.toLowerCase();
-    return requests.filter(
-      (request) =>
+    return requests.filter((request) => {
+      const requester = getRequesterIdentity(request.fields, request.clientEmail);
+      return (
         request.clientName.toLowerCase().includes(normalized) ||
         request.clientEmail.toLowerCase().includes(normalized) ||
+        requester.name.toLowerCase().includes(normalized) ||
+        requester.email.toLowerCase().includes(normalized) ||
         request.id.toLowerCase().includes(normalized) ||
         request.status.toLowerCase().includes(normalized)
-    );
+      );
+    });
   }, [query, requests]);
 
   const selected = requests.find((request) => request.id === selectedId) || null;
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) || templates[0] || null;
 
   useEffect(() => {
     if (!auth) {
@@ -58,7 +74,6 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
           router.replace("/admin/requests");
           return;
         }
-        setAdminAccess("checking");
         void loadRequests().then((hasAccess) => {
           if (!hasAccess) {
             setAdminAccess("denied");
@@ -128,7 +143,7 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
         return;
       }
       setTemplates(result.templates || []);
-      setTemplateStatus(result.message || "Database templates loaded.");
+      setTemplateStatus("");
     } catch {
       setTemplateStatus("Could not load database templates.");
     }
@@ -144,24 +159,25 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
       });
       const result = (await response.json()) as { message?: string; requests?: QdroRequest[] };
       if (!response.ok) {
-        setTemplateStatus(result.message || "Could not load database requests.");
+        setRequestStatus(result.message || "Could not load database requests.");
         return false;
       }
       if (!result.requests?.length) {
-        setTemplateStatus(result.message || "No database requests found yet. Showing demo requests.");
+        setRequestStatus(result.message || "No database requests found yet. Showing demo requests.");
         return true;
       }
 
       setRequests(mergeRequests(result.requests, sampleRequests));
-      setTemplateStatus(`Loaded ${result.requests.length} database request${result.requests.length === 1 ? "" : "s"}.`);
+      setRequestStatus("");
       return true;
     } catch (error) {
-      setTemplateStatus(error instanceof Error ? error.message : "Could not load database requests.");
+      setRequestStatus(error instanceof Error ? error.message : "Could not load database requests.");
       return false;
     }
   }
 
   function updateStatus(requestId: string, status: RequestStatus) {
+    markRequestDirty(requestId);
     setRequests((current) =>
       current.map((request) =>
         request.id === requestId
@@ -176,6 +192,7 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
   }
 
   function updateField(requestId: string, field: string, value: string) {
+    markRequestDirty(requestId);
     setRequests((current) =>
       current.map((request) =>
         request.id === requestId
@@ -190,6 +207,7 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
   }
 
   function updateInternalNotes(requestId: string, body: string) {
+    markRequestDirty(requestId);
     setRequests((current) =>
       current.map((request) =>
         request.id === requestId
@@ -203,10 +221,53 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
     );
   }
 
+  function markRequestDirty(requestId: string) {
+    setDirtyRequestIds((current) => current.includes(requestId) ? current : [...current, requestId]);
+  }
+
+  async function saveRequestChanges(request: QdroRequest) {
+    const token = await getAdminToken();
+    if (!token) {
+      setRequestStatus("Sign in as an admin to save request changes.");
+      return;
+    }
+
+    try {
+      setSavingRequestId(request.id);
+      const response = await fetch("/api/admin/requests", {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          requestId: request.id,
+          fields: request.fields,
+          notes: request.notes,
+          status: request.status,
+          templateFamily: request.templateFamily
+        })
+      });
+      const result = (await response.json()) as { message?: string; request?: QdroRequest };
+      if (!response.ok || !result.request) {
+        setRequestStatus(result.message || "Could not save request changes.");
+        return;
+      }
+
+      setRequests((current) => current.map((item) => item.id === request.id ? result.request as QdroRequest : item));
+      setDirtyRequestIds((current) => current.filter((id) => id !== request.id));
+      setRequestStatus(result.message || "Request changes saved.");
+    } catch (error) {
+      setRequestStatus(error instanceof Error ? error.message : "Could not save request changes.");
+    } finally {
+      setSavingRequestId("");
+    }
+  }
+
   async function deleteRequest(requestId: string) {
     const token = await getAdminToken();
     if (!token) {
-      setTemplateStatus("Sign in as an admin to delete requests.");
+      setRequestStatus("Sign in as an admin to delete requests.");
       return false;
     }
 
@@ -221,27 +282,28 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
       });
       const result = (await response.json()) as { message?: string };
       if (!response.ok) {
-        setTemplateStatus(result.message || "Could not delete request.");
+        setRequestStatus(result.message || "Could not delete request.");
         return false;
       }
 
       setRequests((current) => current.filter((request) => request.id !== requestId));
       setSelectedId(null);
-      setTemplateStatus(result.message || "Request deleted.");
+      setRequestStatus(result.message || "Request deleted.");
       return true;
     } catch (error) {
-      setTemplateStatus(error instanceof Error ? error.message : "Could not delete request.");
+      setRequestStatus(error instanceof Error ? error.message : "Could not delete request.");
       return false;
     }
   }
 
   async function openUploadedFile(requestId: string, file: RequestFile) {
-    const fileWindow = window.open("", "_blank", "noopener,noreferrer");
+    const fileWindow = window.open("about:blank", "_blank");
+    if (fileWindow) fileWindow.opener = null;
     writeFileWindowMessage(fileWindow, "Opening uploaded file...");
 
     const token = await getAdminToken();
     if (!token) {
-      setTemplateStatus("Sign in as an admin to open uploaded files.");
+      setRequestStatus("Sign in as an admin to open uploaded files.");
       writeFileWindowMessage(fileWindow, "Sign in as an admin to open uploaded files.");
       return;
     }
@@ -253,25 +315,27 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
       });
       const result = (await response.json()) as { message?: string; url?: string };
       if (!response.ok || !result.url) {
-        setTemplateStatus(result.message || "Could not open uploaded file.");
+        setRequestStatus(result.message || "Could not open uploaded file.");
         writeFileWindowMessage(fileWindow, result.message || "Could not open uploaded file.");
         return;
       }
 
       if (fileWindow) {
-        fileWindow.location.href = result.url;
+        fileWindow.location.assign(result.url);
       } else {
-        window.location.href = result.url;
+        const openedWindow = window.open(result.url, "_blank", "noopener,noreferrer");
+        if (!openedWindow) {
+          setRequestStatus("The uploaded file is ready, but the browser blocked the new tab. Allow popups for this site and try again.");
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not open uploaded file.";
-      setTemplateStatus(message);
+      setRequestStatus(message);
       writeFileWindowMessage(fileWindow, message);
     }
   }
 
   function navigateToTab(nextTab: AdminTab) {
-    setTab(nextTab);
     router.push(`/admin/${nextTab}`);
   }
 
@@ -297,18 +361,17 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
     setTemplates((currentTemplates) =>
       currentTemplates.map((template) => (template.id === templateId ? result.template as DocumentTemplate : template))
     );
-    setTemplateStatus(result.message || "Template changes saved.");
   }
 
   return (
     <>
-      {!isLoginScreen && (
+      {!isLoginScreen && adminAccess !== "checking" && (
         <section className="admin-auth-panel">
           <div>
             <span className={`status ${adminAccess === "allowed" ? "info" : "warn"}`}>
-              {adminAccess === "allowed" ? "Admin signed in" : adminAccess === "denied" ? "Access denied" : "Checking admin"}
+              {adminAccess === "allowed" ? "Admin signed in" : "Access denied"}
             </span>
-            <p>{adminUser ? `Signed in as ${adminUser.email || adminUser.uid}.` : "Checking admin access..."}</p>
+            <p>{adminUser ? `Signed in as ${adminUser.email || adminUser.uid}.` : "Sign in with an admin account."}</p>
           </div>
           {adminUser && (
             <div className="toolbar" style={{ marginTop: 0 }}>
@@ -368,16 +431,6 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
             </section>
           </section>
         </main>
-      ) : adminAccess === "checking" ? (
-        <main className="page">
-          <section className="section admin-shell">
-            <section className="panel">
-              <span className="status info">Checking admin access</span>
-              <h1 style={{ marginTop: 12 }}>Verifying permissions.</h1>
-              <p className="lead">One moment while the admin workspace checks this account.</p>
-            </section>
-          </section>
-        </main>
       ) : adminAccess === "denied" ? (
         <main className="page">
           <section className="section admin-shell">
@@ -395,16 +448,12 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
           </section>
         </main>
       ) : (
-      <main className="page">
+      <main className="page admin-page">
         <section className="section admin-shell">
           <div className="section-head">
           <div>
             <div className="eyebrow">Admin</div>
-            <h1>Requests, fields, notes, statuses, and templates.</h1>
-            <p className="lead">
-              Work from the client list first, then open each request to review
-              fields, internal notes, status, and the generated document preview.
-            </p>
+            <h1>{tab === "fields" ? "Fields" : tab === "templates" ? "Templates" : "Requests"}</h1>
           </div>
           <div className="nav-actions">
             <button className={`button ${tab === "requests" ? "primary" : "secondary"}`} onClick={() => navigateToTab("requests")} type="button">
@@ -419,12 +468,13 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
           </div>
         </div>
 
-        {tab === "requests" && (
+        {adminAccess === "allowed" && tab === "requests" && (
           <section className="panel admin-request-panel">
             <div className="admin-list-head">
               <div>
                 <span className="status info">{filtered.length} clients</span>
                 <h2 style={{ marginTop: 12 }}>Client requests</h2>
+                {requestStatus && <p className="template-save-status">{requestStatus}</p>}
               </div>
               <div className="field admin-search">
                 <label htmlFor="request-search">Search requests</label>
@@ -453,26 +503,7 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
                 </thead>
                 <tbody>
                   {filtered.map((request) => (
-                    <tr key={request.id}>
-                      <td>
-                        <span className={`status ${request.status === "Needs Client Info" ? "warn" : "info"}`}>{request.status}</span>
-                      </td>
-                      <td>
-                        <strong>{request.clientName}</strong>
-                        <br />
-                        <small>{request.clientEmail}</small>
-                      </td>
-                      <td>{getEntityType(request)}</td>
-                      <td>{getAccountType(request)}</td>
-                      <td>{formatDate(request.createdAt)}</td>
-                      <td>{formatDate(request.updatedAt)}</td>
-                      <td>
-                        <button className="button secondary compact-action" type="button" onClick={() => setSelectedId(request.id)}>
-                          Edit
-                        </button>
-                      </td>
-                      <td>{formatCurrency(getRequestTotal(request))}</td>
-                    </tr>
+                    <RequestTableRow request={request} key={request.id} onEdit={() => setSelectedId(request.id)} />
                   ))}
                 </tbody>
               </table>
@@ -480,7 +511,7 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
           </section>
         )}
 
-        {tab === "fields" && (
+        {adminAccess === "allowed" && tab === "fields" && (
           <section className="panel">
             <div className="section-head">
               <div>
@@ -521,36 +552,48 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
           </section>
         )}
 
-        {tab === "templates" && (
+        {adminAccess === "allowed" && tab === "templates" && (
           <section className="panel">
             <div className="section-head">
               <div>
                 <span className="status info">Document templates</span>
-                <h2 style={{ marginTop: 12 }}>Versioned template library</h2>
-                <p>Template families can be expanded from the legacy PHP files into merge-field based documents.</p>
                 {templateStatus && <p className="template-save-status">{templateStatus}</p>}
               </div>
-              <button className="button secondary" type="button">
-                Add template version
-              </button>
             </div>
-            <div className="grid two">
-              {templates.map((template) => (
-                <article className="card template-config-card" key={template.id}>
-                  <div className="toolbar" style={{ marginTop: 0 }}>
-                    <span className="status">{template.active ? "active" : "inactive"}</span>
-                    <span className="status info">{template.format || "plain"}</span>
-                  </div>
-                  <h3 style={{ marginTop: 12 }}>{template.name}</h3>
-                  <p>{template.description}</p>
-                  <small>Family: {template.family} · Version {template.version}</small>
-                  <TemplateBodyEditor onSave={saveTemplateChanges} template={template} />
-                </article>
-              ))}
-            </div>
+            {selectedTemplate ? (
+              <div className="template-library">
+                <div className="field template-picker">
+                  <label htmlFor="admin-template-picker">Template</label>
+                  <select
+                    className="select"
+                    id="admin-template-picker"
+                    value={selectedTemplate.id}
+                    onChange={(event) => setSelectedTemplateId(event.target.value)}
+                  >
+                    {templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="template-library-meta">
+                  <span className="status">{selectedTemplate.active ? "active" : "inactive"}</span>
+                  <span className="status info">{selectedTemplate.format || "plain"}</span>
+                  <small>Family: {selectedTemplate.family} · Version {selectedTemplate.version}</small>
+                </div>
+                {selectedTemplate.description &&
+                  selectedTemplate.description !== "Defined contribution order for Fidelity-administered plans." && (
+                    <p>{selectedTemplate.description}</p>
+                  )}
+                <TemplateBodyEditor key={selectedTemplate.id} onSave={saveTemplateChanges} template={selectedTemplate} />
+              </div>
+            ) : (
+              <p>No templates are available yet.</p>
+            )}
           </section>
         )}
-        {tab === "requests" && selected && (
+        {adminAccess === "allowed" && tab === "requests" && selected && (
           <RequestDetailModal
             request={selected}
             templates={templates}
@@ -559,6 +602,9 @@ export function AdminClient({ initialTab = "requests", mode = "workspace" }: { i
             updateInternalNotes={updateInternalNotes}
             deleteRequest={deleteRequest}
             openUploadedFile={openUploadedFile}
+            saveRequestChanges={saveRequestChanges}
+            hasUnsavedChanges={dirtyRequestIds.includes(selected.id)}
+            isSaving={savingRequestId === selected.id}
             onClose={() => setSelectedId(null)}
           />
         )}
@@ -579,7 +625,16 @@ function TemplateBodyEditor({
   const editorRef = useRef<HTMLDivElement>(null);
   const initialBodyRef = useRef(getEditableTemplateBody(template));
   const initializedRef = useRef(false);
+  const [hasTextChanges, setHasTextChanges] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
+
+  function syncTextChangeState() {
+    const currentBody = editorRef.current?.innerHTML || "";
+    setHasTextChanges(currentBody !== initialBodyRef.current);
+    if (currentBody !== initialBodyRef.current && saveStatus === "Template changes saved.") {
+      setSaveStatus("");
+    }
+  }
 
   function setEditorNode(node: HTMLDivElement | null) {
     editorRef.current = node;
@@ -589,23 +644,27 @@ function TemplateBodyEditor({
     }
   }
 
-  function applyFormat(command: "bold" | "italic" | "insertUnorderedList" | "insertOrderedList") {
+  function applyFormat(command: "bold" | "italic" | "underline" | "insertUnorderedList" | "insertOrderedList") {
     editorRef.current?.focus();
     document.execCommand(command);
+    syncTextChangeState();
   }
 
   function insertMergeField(field: string) {
     editorRef.current?.focus();
     document.execCommand("insertText", false, `{{${field}}}`);
+    syncTextChangeState();
   }
 
   async function saveChanges() {
+    if (!hasTextChanges) return;
     const nextBody = editorRef.current?.innerHTML || "";
-    initialBodyRef.current = nextBody;
     setSaveStatus("Saving...");
     try {
       await onSave(template.id, nextBody);
-      setSaveStatus("Changes saved.");
+      initialBodyRef.current = nextBody;
+      setHasTextChanges(false);
+      setSaveStatus("Template changes saved.");
     } catch (error) {
       setSaveStatus(error instanceof Error ? error.message : "Could not save changes.");
     }
@@ -617,32 +676,48 @@ function TemplateBodyEditor({
         <label htmlFor={`${template.id}-body`}>Template body</label>
         <span>Shared caption, legal table, and signature block are added automatically.</span>
       </div>
-      <div className="template-editor-toolbar" aria-label={`${template.name} formatting controls`}>
-        <button className="button secondary compact-action" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("bold")}>
-          B
-        </button>
-        <button className="button secondary compact-action" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("italic")}>
-          I
-        </button>
-        <button className="button secondary compact-action" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("insertUnorderedList")}>
-          Bullets
-        </button>
-        <button className="button secondary compact-action" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("insertOrderedList")}>
-          Numbers
-        </button>
-        <button className="button primary compact-action" type="button" onMouseDown={(event) => event.preventDefault()} onClick={saveChanges}>
-          Save changes
-        </button>
+      <div className="template-editor-shell">
+        <div className="template-editor-toolbar" aria-label={`${template.name} formatting controls`}>
+          <FormatButton label="Bold" onClick={() => applyFormat("bold")}>
+            <strong>B</strong>
+          </FormatButton>
+          <FormatButton label="Italic" onClick={() => applyFormat("italic")}>
+            <em>I</em>
+          </FormatButton>
+          <FormatButton label="Underline" onClick={() => applyFormat("underline")}>
+            <span className="template-format-underline">U</span>
+          </FormatButton>
+          <span className="template-format-divider" aria-hidden="true" />
+          <FormatButton label="Bulleted list" onClick={() => applyFormat("insertUnorderedList")}>
+            <ListIcon ordered={false} />
+          </FormatButton>
+          <FormatButton label="Numbered list" onClick={() => applyFormat("insertOrderedList")}>
+            <ListIcon ordered />
+          </FormatButton>
+          <div className="template-save-group">
+            {saveStatus && <p className="template-save-status">{saveStatus}</p>}
+            <button
+              className="button primary compact-action template-save-button"
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={saveChanges}
+              disabled={!hasTextChanges}
+            >
+              Save changes
+            </button>
+          </div>
+        </div>
+        <div
+          className="template-body-editor"
+          contentEditable
+          id={`${template.id}-body`}
+          ref={setEditorNode}
+          role="textbox"
+          aria-multiline="true"
+          onInput={syncTextChangeState}
+          suppressContentEditableWarning
+        />
       </div>
-      {saveStatus && <p className="template-save-status">{saveStatus}</p>}
-      <div
-        className="template-body-editor"
-        contentEditable
-        id={`${template.id}-body`}
-        ref={setEditorNode}
-        role="textbox"
-        suppressContentEditableWarning
-      />
       <div className="template-merge-list">
         {(template.mergeFields || []).map((field) => (
           <button
@@ -660,6 +735,50 @@ function TemplateBodyEditor({
   );
 }
 
+function FormatButton({
+  children,
+  label,
+  onClick
+}: {
+  children: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="template-format-button"
+      type="button"
+      aria-label={label}
+      title={label}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ListIcon({ ordered }: { ordered: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      {ordered ? (
+        <g fill="currentColor" stroke="none" fontSize="6.5" fontFamily="Georgia, serif">
+          <text x="0.4" y="6">1</text>
+          <text x="0.4" y="12">2</text>
+          <text x="0.4" y="17.8">3</text>
+        </g>
+      ) : (
+        <>
+          <circle cx="3" cy="4" r="1.15" fill="currentColor" stroke="none" />
+          <circle cx="3" cy="10" r="1.15" fill="currentColor" stroke="none" />
+          <circle cx="3" cy="16" r="1.15" fill="currentColor" stroke="none" />
+        </>
+      )}
+      <path d="M7.5 4h10.2M7.5 10h10.2M7.5 16h10.2" />
+    </svg>
+  );
+}
+
 function RequestDetailModal({
   request,
   templates,
@@ -668,6 +787,9 @@ function RequestDetailModal({
   updateInternalNotes,
   deleteRequest,
   openUploadedFile,
+  saveRequestChanges,
+  hasUnsavedChanges,
+  isSaving,
   onClose
 }: {
   request: QdroRequest;
@@ -677,9 +799,13 @@ function RequestDetailModal({
   updateInternalNotes: (id: string, body: string) => void;
   deleteRequest: (id: string) => Promise<boolean>;
   openUploadedFile: (requestId: string, file: RequestFile) => Promise<void>;
+  saveRequestChanges: (request: QdroRequest) => Promise<void>;
+  hasUnsavedChanges: boolean;
+  isSaving: boolean;
   onClose: () => void;
 }) {
   const [showPreview, setShowPreview] = useState(false);
+  const requester = getRequesterIdentity(request.fields, request.clientEmail);
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -693,14 +819,14 @@ function RequestDetailModal({
         <div className="modal-head">
           <div>
             <span className="status info">{request.id}</span>
-            <h2 id="request-modal-title" style={{ marginTop: 12 }}>{request.clientName}</h2>
+            <h2 id="request-modal-title" style={{ marginTop: 12 }}>{requester.name || request.clientName}</h2>
             <p>
-              {request.clientEmail} · {getEntityType(request)} · Total {formatCurrency(getRequestTotal(request))}
+              {requester.email || request.clientEmail} · {getEntityType(request)} · Total {formatCurrency(getRequestTotal(request))}
             </p>
           </div>
           <div className="modal-head-actions">
             <button className="button secondary" type="button" onClick={() => setShowPreview(!showPreview)}>
-              {showPreview ? "Hide preview" : "Preview document"}
+              {showPreview ? "Hide preview" : "Preview QDRO"}
             </button>
             <button className="button secondary" type="button" onClick={onClose} aria-label="Close request detail">
               Close
@@ -722,8 +848,45 @@ function RequestDetailModal({
             openUploadedFile={openUploadedFile}
           />
         </div>
+        {!showPreview && (
+          <div className="modal-save-footer">
+            <span className={`status ${hasUnsavedChanges ? "warn" : "info"}`}>
+              {hasUnsavedChanges ? "Unsaved changes" : "Saved"}
+            </span>
+            <button className="button primary compact-action" type="button" onClick={() => void saveRequestChanges(request)} disabled={!hasUnsavedChanges || isSaving}>
+              {isSaving ? "Saving..." : "Save changes"}
+            </button>
+          </div>
+        )}
       </section>
     </div>
+  );
+}
+
+function RequestTableRow({ request, onEdit }: { request: QdroRequest; onEdit: () => void }) {
+  const requester = getRequesterIdentity(request.fields, request.clientEmail);
+
+  return (
+    <tr>
+      <td>
+        <span className={`status ${request.status === "Needs Client Info" ? "warn" : "info"}`}>{request.status}</span>
+      </td>
+      <td>
+        <strong>{requester.name || request.clientName}</strong>
+        <br />
+        <small>{requester.email || request.clientEmail}</small>
+      </td>
+      <td>{getEntityType(request)}</td>
+      <td>{getAccountType(request)}</td>
+      <td>{formatDate(request.createdAt)}</td>
+      <td>{formatDate(request.updatedAt)}</td>
+      <td>
+        <button className="button secondary compact-action" type="button" onClick={onEdit}>
+          Edit
+        </button>
+      </td>
+      <td>{formatCurrency(getRequestTotal(request))}</td>
+    </tr>
   );
 }
 
@@ -744,8 +907,9 @@ function RequestEditor({
 }) {
   const schemaFieldIds = new Set(intakeSteps.flatMap((step) => step.fields.map((field) => field.id)));
   const extraFields = Object.entries(request.fields).filter(
-    ([field, value]) => !schemaFieldIds.has(field) && !derivedRequestFieldIds.has(field) && hasDisplayValue(value)
+    ([field, value]) => field !== "client_signature" && !schemaFieldIds.has(field) && !derivedRequestFieldIds.has(field) && hasDisplayValue(value)
   );
+  const clientSignature = typeof request.fields.client_signature === "string" ? request.fields.client_signature : "";
 
   return (
     <section className="panel">
@@ -834,6 +998,7 @@ function RequestEditor({
             </section>
           )}
         </div>
+        {clientSignature && <ClientSignaturePreview signature={clientSignature} />}
         <div className="toolbar">
           <button
             className="button danger"
@@ -981,6 +1146,26 @@ function AdminFieldControl({
         placeholder={field.placeholder}
       />
     </div>
+  );
+}
+
+function ClientSignaturePreview({ signature }: { signature: string }) {
+  const isImageSignature = signature.startsWith("data:image/");
+
+  return (
+    <section className="admin-intake-step">
+      <div>
+        <span className="status info">Client signature</span>
+        <p>Authorization signature saved with this request.</p>
+      </div>
+      <div className="admin-signature-preview">
+        {isImageSignature ? (
+          <img alt="Client signature" src={signature} />
+        ) : (
+          <span>Signature saved</span>
+        )}
+      </div>
+    </section>
   );
 }
 

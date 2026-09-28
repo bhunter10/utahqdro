@@ -49,7 +49,7 @@ export function PortalClient() {
         await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to sign in. Please try again.");
+      setMessage(getPortalAuthMessage(error, mode));
     } finally {
       setIsSubmitting(false);
     }
@@ -185,4 +185,30 @@ export function PortalClient() {
       </section>
     </main>
   );
+}
+
+function getPortalAuthMessage(error: unknown, mode: "sign-in" | "create") {
+  const message = error instanceof Error ? error.message : "";
+
+  if (message.includes("auth/invalid-credential") || message.includes("auth/user-not-found") || message.includes("auth/wrong-password")) {
+    return "We couldn't find an account with that email and password. Please check both and try again, or create an account if this is your first time here.";
+  }
+
+  if (message.includes("auth/email-already-in-use")) {
+    return "An account already exists for that email. Please sign in instead.";
+  }
+
+  if (message.includes("auth/weak-password")) {
+    return "Please choose a stronger password. It should be at least 6 characters.";
+  }
+
+  if (message.includes("auth/invalid-email")) {
+    return "Please enter a valid email address.";
+  }
+
+  if (message.includes("auth/too-many-requests")) {
+    return "Too many attempts were made. Please wait a few minutes and try again.";
+  }
+
+  return mode === "create" ? "Unable to create your account. Please try again." : "Unable to sign in. Please try again.";
 }

@@ -9,7 +9,7 @@ import {
   type User
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { intakeSteps } from "@/lib/content";
+import { intakeSteps, qdroConsentText } from "@/lib/content";
 import {
   aiIntakeFieldMap,
   getMissingRequiredAiFields,
@@ -21,10 +21,11 @@ import {
   type AiFieldConfidence,
   type AiUploadedFile
 } from "@/lib/ai-intake";
-import { formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
+import { formatLongDate, formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
 import { auth, db, hasFirebaseConfig, missingFirebaseConfig } from "@/lib/firebase";
 import type { IntakeField } from "@/lib/types";
 import { findUtahCourt } from "@/lib/utah-courts";
+import { SignaturePad } from "./SignaturePad";
 
 const readinessChecks = [
   {
@@ -53,17 +54,19 @@ const iraWarning =
   "Warning, IRAs do not normally need a QDRO to divide. Give your decree to the financial provider where the IRA is being held, and they should divide it for you. On very RARE occasions, an IRA may be inside of a qualified account, and the plan administrator specifically requests a QDRO be drafted and sent to them. If you proceed and request a QDRO, and it turns out a QDRO was not needed, there will be no refunds issued.";
 
 type WizardData = Record<string, string | boolean>;
-type Stage = "readiness" | "account" | "uploads" | "missing" | "confirm" | "submitted";
+type Stage = "readiness" | "account" | "uploads" | "missing" | "confirm" | "sign-pay" | "submitted";
 
 const storageKey = "utah-qdro-ai-intake";
 
 export function AiIntakeWizard() {
   const [stage, setStage] = useState<Stage>("readiness");
+  const [isDraftLoaded, setIsDraftLoaded] = useState(false);
   const [ready, setReady] = useState<Record<string, boolean>>({});
   const [data, setData] = useState<WizardData>({});
   const [uploadedFiles, setUploadedFiles] = useState<AiUploadedFile[]>([]);
   const [extraction, setExtraction] = useState<AiExtractionResult>({ summary: "", fields: [] });
   const [clientUser, setClientUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(!auth);
   const [accountMode, setAccountMode] = useState<"create" | "sign-in">("create");
   const [accountEmail, setAccountEmail] = useState("");
   const [accountPassword, setAccountPassword] = useState("");
@@ -74,43 +77,101 @@ export function AiIntakeWizard() {
   const [requestId, setRequestId] = useState(() => `QDRO-AI-${Date.now()}`);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(storageKey);
-    if (!saved) return;
-    const parsed = JSON.parse(saved) as {
-      data?: WizardData;
-      ready?: Record<string, boolean>;
-      uploadedFiles?: AiUploadedFile[];
-      extraction?: AiExtractionResult;
-      questionFieldIds?: string[];
-      requestId?: string;
-      stage?: Stage;
-    };
-    if (parsed.requestId) setRequestId(parsed.requestId);
-    setData(parsed.data || {});
-    setReady(parsed.ready || {});
-    setUploadedFiles(parsed.uploadedFiles || []);
-    setExtraction(parsed.extraction || { summary: "", fields: [] });
-    setQuestionFieldIds(parsed.questionFieldIds || []);
-    if (parsed.stage && parsed.stage !== "submitted") setStage(parsed.stage);
-  }, []);
-
-  useEffect(() => {
-    if (!auth) return;
+    if (!auth) {
+      setAuthReady(true);
+      return;
+    }
     return onAuthStateChanged(auth, (currentUser) => {
       setClientUser(currentUser);
+      setAuthReady(true);
       if (currentUser?.email) {
         setAccountEmail(currentUser.email);
         setData((current) => current.party1_email ? current : { ...current, party1_email: currentUser.email || "" });
+      } else {
+        window.localStorage.removeItem(storageKey);
+        setAccountEmail("");
+        setData({});
+        setReady({});
+        setUploadedFiles([]);
+        setExtraction({ summary: "", fields: [] });
+        setQuestionFieldIds([]);
+        setRequestId(`QDRO-AI-${Date.now()}`);
+        setStage("readiness");
       }
     });
   }, []);
 
   useEffect(() => {
+    if (!authReady || isDraftLoaded) return;
+
+    const saved = window.localStorage.getItem(storageKey);
+    if (!clientUser) {
+      window.localStorage.removeItem(storageKey);
+      setIsDraftLoaded(true);
+      return;
+    }
+
+    if (!saved) {
+      setIsDraftLoaded(true);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(saved) as {
+        data?: WizardData;
+        ready?: Record<string, boolean>;
+        uploadedFiles?: AiUploadedFile[];
+        extraction?: AiExtractionResult;
+        questionFieldIds?: string[];
+        requestId?: string;
+        stage?: Stage;
+        ownerUid?: string;
+        ownerEmail?: string;
+      };
+      const savedOwnerUid = parsed.ownerUid || "";
+      const savedOwnerEmail = parsed.ownerEmail || "";
+      const belongsToCurrentUser =
+        savedOwnerUid ? savedOwnerUid === clientUser.uid : savedOwnerEmail ? savedOwnerEmail === (clientUser.email || "") : false;
+
+      if (!belongsToCurrentUser) {
+        window.localStorage.removeItem(storageKey);
+        return;
+      }
+
+      if (parsed.requestId) setRequestId(parsed.requestId);
+      setData(parsed.data || {});
+      setReady(parsed.ready || {});
+      setUploadedFiles(parsed.uploadedFiles || []);
+      setExtraction(parsed.extraction || { summary: "", fields: [] });
+      setQuestionFieldIds(parsed.questionFieldIds || []);
+      if (parsed.stage && parsed.stage !== "submitted") setStage(parsed.stage);
+    } catch {
+      window.localStorage.removeItem(storageKey);
+    } finally {
+      setIsDraftLoaded(true);
+    }
+  }, [authReady, clientUser, isDraftLoaded]);
+
+  useEffect(() => {
+    if (!isDraftLoaded || !clientUser) return;
     const handle = window.setTimeout(() => {
-      window.localStorage.setItem(storageKey, JSON.stringify({ data, ready, uploadedFiles, extraction, questionFieldIds, requestId, stage }));
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          data,
+          ready,
+          uploadedFiles,
+          extraction,
+          questionFieldIds,
+          requestId,
+          stage,
+          ownerUid: clientUser.uid,
+          ownerEmail: clientUser.email || ""
+        })
+      );
     }, 350);
     return () => window.clearTimeout(handle);
-  }, [data, extraction, questionFieldIds, ready, requestId, stage, uploadedFiles]);
+  }, [clientUser, data, extraction, isDraftLoaded, questionFieldIds, ready, requestId, stage, uploadedFiles]);
 
   const readyComplete = readinessChecks.every((check) => ready[check.id]) && isIraScreeningComplete(data);
   const hasExtraction = Boolean(extraction.summary || extraction.fields.length);
@@ -292,6 +353,7 @@ export function AiIntakeWizard() {
 
       const nextData = { ...data };
       for (const field of result.result.fields) {
+        if (field.id === "requester_role") continue;
         if (field.confidence !== "missing" && field.value) {
           const intakeField = aiIntakeFieldMap.get(field.id);
           nextData[field.id] = normalizeAiFieldValue(intakeField, field.value);
@@ -321,11 +383,11 @@ export function AiIntakeWizard() {
     }
   }
 
-  async function submitRequest() {
+  async function saveRequest() {
     setMessage("");
     if (!auth?.currentUser) {
       setMessage("Sign in before submitting.");
-      return;
+      return false;
     }
 
     const remaining = getMissingAiFieldsForUploads(data, uploadedFiles);
@@ -350,16 +412,36 @@ export function AiIntakeWizard() {
       const result = (await response.json()) as { message?: string };
       if (!response.ok) {
         setMessage(result.message || "Could not submit this request.");
-        return;
+        return false;
       }
 
-      setStage("submitted");
       window.localStorage.removeItem(storageKey);
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not submit this request.");
+      return false;
     } finally {
       setIsWorking(false);
     }
+  }
+
+  async function submitRequestAndCheckout() {
+    const saved = await saveRequest();
+    if (!saved) return;
+
+    const response = await fetch("/api/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestId, cancelPath: "/qdro-request-ai" })
+    });
+    const payload = (await response.json()) as { url?: string; message?: string };
+    if (payload.url) {
+      window.location.href = payload.url;
+      return;
+    }
+
+    setStage("submitted");
+    alert(payload.message || "Payment route is ready. Add Stripe credentials to enable live checkout.");
   }
 
   function continueFromMissingQuestions() {
@@ -388,12 +470,15 @@ export function AiIntakeWizard() {
     setStage(readyComplete ? "uploads" : "readiness");
   }
 
+  if (!isDraftLoaded) {
+    return null;
+  }
+
   return (
     <div className="form-layout ai-intake-layout">
       <aside className="sidebar">
         <div style={{ padding: 10 }}>
-          <strong>AI request progress</strong>
-          <p style={{ margin: "6px 0 12px" }}>Experimental document-first intake</p>
+          <strong style={{ display: "block", marginBottom: 12 }}>QDRO request</strong>
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${progress}%` }} />
           </div>
@@ -405,7 +490,7 @@ export function AiIntakeWizard() {
           ["readiness", "Readiness"],
           ["account", "Account setup"],
           ["uploads", "Upload & extract"],
-          ...(hasExtraction ? [["missing", "Remaining questions"], ["confirm", "Confirm everything"]] : [])
+          ...(hasExtraction ? [["missing", "Remaining questions"], ["confirm", "Confirm everything"], ["sign-pay", "Sign and pay"]] : [])
         ].map(([id, label]) => (
           <button className={`step-tab ${stage === id ? "active" : ""}`} key={id} type="button" onClick={() => setStage(id as Stage)}>
             {label}
@@ -414,14 +499,6 @@ export function AiIntakeWizard() {
       </aside>
 
       <div className="wizard">
-        <section className="panel ai-intake-head">
-          <span className="status info">AI assisted intake</span>
-          <h1>AI-assisted QDRO request</h1>
-          <p>
-            The original request page stays unchanged. This version saves the uploaded files, tries to fill the QDRO intake from them, asks for anything missing, and sends the request to admin review.
-          </p>
-        </section>
-
         {message && <p className="ai-intake-message">{message}</p>}
 
         {stage === "readiness" && (
@@ -469,6 +546,7 @@ export function AiIntakeWizard() {
             missingFields={missingFields}
             onBack={() => setStage("uploads")}
             onContinue={continueFromMissingQuestions}
+            questionFieldIds={questionFieldIds}
             updateField={updateField}
           />
         )}
@@ -476,10 +554,19 @@ export function AiIntakeWizard() {
         {stage === "confirm" && (
           <ConfirmStep
             data={data}
-            extraction={extraction}
             isWorking={isWorking}
             onBack={() => setStage("missing")}
-            onSubmit={submitRequest}
+            onSubmit={() => setStage("sign-pay")}
+            updateField={updateField}
+          />
+        )}
+
+        {stage === "sign-pay" && (
+          <SignAndPayStep
+            data={data}
+            isWorking={isWorking}
+            onBack={() => setStage("confirm")}
+            onSubmit={submitRequestAndCheckout}
             updateField={updateField}
           />
         )}
@@ -487,14 +574,9 @@ export function AiIntakeWizard() {
         {stage === "submitted" && (
           <section className="panel">
             <span className="status info">Submitted</span>
-            <h2>Request sent to admin review.</h2>
-            <p>
-              This request is saved as {requestId}. You can open the admin requests workspace to review the uploaded files, confirmed answers, and internal AI note.
-            </p>
+            <h2>Request sent.</h2>
+            <p>This request is saved as {requestId}.</p>
             <div className="toolbar">
-              <Link className="button primary" href="/admin/requests">
-                Open admin requests
-              </Link>
               <Link className="button secondary" href="/qdro-request-ai">
                 Start another AI request
               </Link>
@@ -717,7 +799,7 @@ function UploadStep({
       {isExtracting && <DocumentScanAnimation />}
       <div className="toolbar">
         <button className="button primary" type="button" disabled={isWorking || !files.length} onClick={onRunExtraction}>
-          {isExtracting ? "Reviewing documents..." : "Extract answers from documents"}
+          {isExtracting ? "Reviewing documents..." : "Continue"}
         </button>
       </div>
     </section>
@@ -778,6 +860,7 @@ function MissingQuestionsStep({
   missingFields,
   onBack,
   onContinue,
+  questionFieldIds,
   updateField
 }: {
   data: WizardData;
@@ -785,6 +868,7 @@ function MissingQuestionsStep({
   missingFields: IntakeField[];
   onBack: () => void;
   onContinue: () => void;
+  questionFieldIds: string[];
   updateField: (id: string, value: string | boolean) => void;
 }) {
   const [shownFieldIds, setShownFieldIds] = useState(() => missingFields.map((field) => field.id));
@@ -806,10 +890,22 @@ function MissingQuestionsStep({
   const displayFields = shownFieldIds
     .map((fieldId) => aiIntakeFieldMap.get(fieldId))
     .filter((field): field is IntakeField => Boolean(field && isAiFieldVisible(field, data)));
+  const reviewFields = intakeSteps
+    .filter((step) => step.id !== "uploads")
+    .flatMap((step) => step.fields)
+    .filter((field) => isAiFieldVisible(field, data) && (field.required || hasWizardFieldValue(data[field.id])));
+  const confidenceRows = getConfirmConfidenceRows(reviewFields, data, extraction.fields, questionFieldIds);
 
   return (
     <section className="panel">
       <span className={displayFields.length ? "status warn" : "status info"}>{displayFields.length ? "Questions needed" : "Required questions complete"}</span>
+      {confidenceRows.length > 0 && (
+        <div className="ai-confidence-list">
+          {confidenceRows.map((field) => (
+            <ConfidenceRow field={field} key={field.id} />
+          ))}
+        </div>
+      )}
       {displayFields.length > 0 && (
         <p>
           Your documents covered most of what we need. Please answer a few more details that are still missing.
@@ -835,11 +931,13 @@ function MissingQuestionsStep({
 function MissingQuestionGroups({
   fields,
   data,
+  reviewMode = false,
   showStepDescriptions = true,
   updateField
 }: {
   fields: IntakeField[];
   data: WizardData;
+  reviewMode?: boolean;
   showStepDescriptions?: boolean;
   updateField: (id: string, value: string | boolean) => void;
 }) {
@@ -858,11 +956,19 @@ function MissingQuestionGroups({
               {showStepDescriptions && step.description && <p>{step.description}</p>}
             </div>
             {step.id === "parties" ? (
-              <AiPartyFieldGroups fields={stepFields} data={data} updateField={updateField} />
+              reviewMode ? (
+                <AiReviewPartyFieldGroups fields={stepFields} data={data} updateField={updateField} />
+              ) : (
+                <AiPartyFieldGroups fields={stepFields} data={data} updateField={updateField} />
+              )
             ) : (
-              <div className="field-grid">
+              <div className={reviewMode ? "ai-review-field-list" : "field-grid"}>
                 {stepFields.map((field) => (
-                  <AiFieldControl data={data} field={field} key={field.id} onChange={(value) => updateField(field.id, value)} value={data[field.id]} />
+                  reviewMode ? (
+                    <AiReviewFieldControl data={data} field={field} key={field.id} updateField={updateField} value={data[field.id]} />
+                  ) : (
+                    <AiFieldControl data={data} field={field} key={field.id} onChange={(value) => updateField(field.id, value)} value={data[field.id]} />
+                  )
                 ))}
               </div>
             )}
@@ -929,16 +1035,106 @@ function AiPartyFieldGroups({
   );
 }
 
+function AiReviewPartyFieldGroups({
+  fields,
+  data,
+  updateField
+}: {
+  fields: IntakeField[];
+  data: WizardData;
+  updateField: (id: string, value: string | boolean) => void;
+}) {
+  const party1Fields = fields.filter((field) => field.id.startsWith("party1_"));
+  const party2Fields = fields.filter((field) => field.id.startsWith("party2_"));
+  const remainingFields = fields.filter((field) => !field.id.startsWith("party1_") && !field.id.startsWith("party2_"));
+  const party1Name = getPartyDisplayName(data.party1_name);
+  const party2Name = getPartyDisplayName(data.party2_name);
+
+  return (
+    <div className="party-field-groups">
+      {remainingFields.length > 0 && (
+        <div className="ai-review-field-list">
+          {remainingFields.map((field) => (
+            <AiReviewFieldControl data={data} field={field} key={field.id} updateField={updateField} value={data[field.id]} />
+          ))}
+        </div>
+      )}
+      {party1Fields.length > 0 && (
+        <section className="party-field-group">
+          <div className="party-field-group-head">
+            <span className="status info">Party 1{party1Name ? `: ${party1Name}` : ""}</span>
+          </div>
+          <div className="ai-review-field-list">
+            {party1Fields.map((field) => (
+              <AiReviewFieldControl data={data} field={field} key={field.id} updateField={updateField} value={data[field.id]} />
+            ))}
+          </div>
+        </section>
+      )}
+      {party2Fields.length > 0 && (
+        <section className="party-field-group party-field-group-secondary">
+          <div className="party-field-group-head">
+            <span className="status info">Party 2{party2Name ? `: ${party2Name}` : ""}</span>
+          </div>
+          <div className="ai-review-field-list">
+            {party2Fields.map((field) => (
+              <AiReviewFieldControl data={data} field={field} key={field.id} updateField={updateField} value={data[field.id]} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function AiReviewFieldControl({
+  data,
+  field,
+  updateField,
+  value
+}: {
+  data: WizardData;
+  field: IntakeField;
+  updateField: (id: string, value: string | boolean) => void;
+  value: string | boolean | undefined;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const label = aiFieldLabelOverrides[field.id] || field.label;
+  const reviewValue = formatReviewFieldValue(field, value);
+
+  return (
+    <div className={`ai-review-field ${field.fullWidth ? "full-field" : ""}`}>
+      <button className="ai-review-field-line" type="button" onClick={() => setIsEditing((current) => !current)}>
+        <div className="ai-review-field-copy">
+          <span>{label}</span>
+          <strong className={reviewValue ? "" : "empty"}>{reviewValue || "Not answered"}</strong>
+        </div>
+        <span className="ai-review-edit-button" aria-hidden="true">
+          <PencilIcon />
+        </span>
+      </button>
+      {isEditing && (
+        <div className="ai-review-field-editor">
+          <AiFieldControl data={data} field={field} onChange={(nextValue) => updateField(field.id, nextValue)} value={value} />
+          <div className="toolbar compact-toolbar">
+            <button className="button secondary compact-action" type="button" onClick={() => setIsEditing(false)}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConfirmStep({
   data,
-  extraction,
   isWorking,
   onBack,
   onSubmit,
   updateField
 }: {
   data: WizardData;
-  extraction: AiExtractionResult;
   isWorking: boolean;
   onBack: () => void;
   onSubmit: () => void;
@@ -952,22 +1148,62 @@ function ConfirmStep({
   return (
     <section className="panel">
       <span className="status info">Confirm everything</span>
-      {extraction.fields.length > 0 && (
-        <div className="ai-confidence-list">
-          {extraction.fields.map((field) => (
-            <ConfidenceRow field={field} key={field.id} />
-          ))}
-        </div>
-      )}
-      <MissingQuestionGroups fields={confirmFields} data={data} updateField={updateField} />
+      <MissingQuestionGroups fields={confirmFields} data={data} reviewMode updateField={updateField} />
       <div className="toolbar">
         <button className="button secondary" type="button" onClick={onBack}>
           Back
         </button>
         <button className="button primary" type="button" onClick={onSubmit} disabled={isWorking}>
-          {isWorking ? "Submitting..." : "Submit to admin review"}
+          Continue
         </button>
       </div>
+    </section>
+  );
+}
+
+function SignAndPayStep({
+  data,
+  isWorking,
+  onBack,
+  onSubmit,
+  updateField
+}: {
+  data: WizardData;
+  isWorking: boolean;
+  onBack: () => void;
+  onSubmit: () => void;
+  updateField: (id: string, value: string | boolean) => void;
+}) {
+  return (
+    <section className="panel">
+      <span className="status info">Sign and pay</span>
+      <div className="field" style={{ marginTop: 22 }}>
+        <label>Client signature</label>
+        <div className="consent-copy">
+          <p>{qdroConsentText}</p>
+        </div>
+        <label className="choice consent-agreement">
+          <input
+            type="checkbox"
+            checked={data.engagement_terms_agreed === true}
+            onChange={(event) => updateField("engagement_terms_agreed", event.target.checked)}
+          />
+          <span>I agree to the engagement terms stated above.</span>
+        </label>
+        <SignaturePad
+          value={typeof data.client_signature === "string" ? data.client_signature : ""}
+          onChange={(signature) => updateField("client_signature", signature)}
+        />
+      </div>
+      <div className="toolbar">
+        <button className="button secondary" type="button" onClick={onBack}>
+          Back
+        </button>
+        <button className="button primary" type="button" onClick={onSubmit} disabled={isWorking || !data.client_signature || data.engagement_terms_agreed !== true}>
+          {isWorking ? "Saving..." : "Continue to payment"}
+        </button>
+      </div>
+      {(!data.client_signature || data.engagement_terms_agreed !== true) && <p>Please agree to the terms and sign before continuing to payment.</p>}
     </section>
   );
 }
@@ -1071,7 +1307,9 @@ function AiFieldControl({
 }
 
 function ConfidenceRow({ field }: { field: AiExtractedField }) {
-  const valueText = field.value || (field.confidence === "missing" ? "Not found in the uploaded documents" : "");
+  const intakeField = aiIntakeFieldMap.get(field.id);
+  const formattedValue = intakeField?.type === "date" ? formatLongDate(field.value) : field.value;
+  const valueText = formattedValue || (field.confidence === "missing" ? "Not found in the uploaded documents" : "");
   const detailText =
     field.source || field.note
       ? `${field.source || "No source listed"}${field.note ? ` · ${field.note}` : ""}`
@@ -1091,6 +1329,15 @@ function ConfidenceRow({ field }: { field: AiExtractedField }) {
   );
 }
 
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M4 13.7 13.4 4.3a1.8 1.8 0 0 1 2.6 0l.7.7a1.8 1.8 0 0 1 0 2.6L7.3 17H4v-3.3Z" />
+      <path d="m12.4 5.3 2.3 2.3" />
+    </svg>
+  );
+}
+
 const aiFieldLabelOverrides: Record<string, string> = {
   requester_name: "Party Requester Name",
   requester_phone: "Party Requester Phone",
@@ -1104,9 +1351,13 @@ function isIraScreeningComplete(data: WizardData) {
 
 function getVisibleQuestionFields(data: WizardData, files: AiUploadedFile[], questionFieldIds: string[], stage: Stage) {
   const currentMissingFields = getMissingAiFieldsForUploads(data, files);
-  if (stage !== "missing" || questionFieldIds.length === 0) return currentMissingFields;
+  if (stage !== "missing") return currentMissingFields;
 
   const fieldsById = new Map(currentMissingFields.map((field) => [field.id, field]));
+  const requesterRoleField = aiIntakeFieldMap.get("requester_role");
+  if (requesterRoleField) {
+    fieldsById.set(requesterRoleField.id, requesterRoleField);
+  }
   for (const fieldId of questionFieldIds) {
     const field = aiIntakeFieldMap.get(fieldId);
     if (field && isAiFieldVisible(field, data)) {
@@ -1115,6 +1366,53 @@ function getVisibleQuestionFields(data: WizardData, files: AiUploadedFile[], que
   }
 
   return Array.from(fieldsById.values());
+}
+
+function getConfirmConfidenceRows(
+  confirmFields: IntakeField[],
+  data: WizardData,
+  extractionFields: AiExtractedField[],
+  questionFieldIds: string[]
+) {
+  const visibleConfirmFields = new Map(confirmFields.map((field) => [field.id, field]));
+  const rowsById = new Map<string, AiExtractedField>();
+
+  for (const field of extractionFields) {
+    if (visibleConfirmFields.has(field.id)) {
+      rowsById.set(field.id, field);
+    }
+  }
+
+  for (const fieldId of questionFieldIds) {
+    const field = visibleConfirmFields.get(fieldId);
+    if (!field || rowsById.has(fieldId)) continue;
+
+    const value = data[fieldId];
+    const hasValue = hasWizardFieldValue(value);
+    rowsById.set(fieldId, {
+      id: fieldId,
+      value: hasValue ? String(value) : "",
+      confidence: hasValue ? "review" : "missing",
+      source: "Uploaded documents",
+      note: hasValue ? "Answered after document review." : "Not found in the uploaded documents."
+    });
+  }
+
+  for (const field of confirmFields) {
+    if (!field.required || rowsById.has(field.id) || hasWizardFieldValue(data[field.id])) continue;
+    rowsById.set(field.id, {
+      id: field.id,
+      value: "",
+      confidence: "missing",
+      source: "Uploaded documents",
+      note: "Not found in the uploaded documents."
+    });
+  }
+
+  return confirmFields.flatMap((field) => {
+    const row = rowsById.get(field.id);
+    return row ? [row] : [];
+  });
 }
 
 function getMissingAiFieldsForUploads(data: WizardData, files: AiUploadedFile[]) {
@@ -1184,6 +1482,27 @@ function appendSpecialTerm(current: string | boolean | undefined, detail: string
   if (!currentText) return detail;
   if (currentText.includes(detail)) return currentText;
   return `${currentText}\n${detail}`;
+}
+
+function formatReviewFieldValue(field: IntakeField, value: string | boolean | undefined) {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (field.type === "date") return formatLongDate(text);
+  if (field.type === "phone") return formatPhoneInput(text);
+  if (isSsnFieldId(field.id)) return formatSsnInput(text);
+  if (field.type === "currency") {
+    const numericAmount = Number(text.replace(/[$,]/g, ""));
+    if (Number.isFinite(numericAmount)) {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 2
+      }).format(numericAmount);
+    }
+  }
+  if (field.type === "percent" && !text.includes("%")) return `${text}%`;
+  return text;
 }
 
 function getProgress(stage: Stage, readyComplete: boolean, clientUser: User | null, fileCount: number, missingCount: number) {

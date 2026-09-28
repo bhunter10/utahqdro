@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
 export async function POST(req: Request) {
-  const { requestId } = (await req.json()) as { requestId?: string };
+  const { requestId, cancelPath } = (await req.json()) as { requestId?: string; cancelPath?: string };
   const secretKey = process.env.STRIPE_SECRET_KEY;
   const priceId = process.env.STRIPE_QDRO_PRICE_ID;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const safeCancelPath = cancelPath?.startsWith("/") && !cancelPath.startsWith("//") ? cancelPath : "/qdro-request";
 
   if (!secretKey || !priceId) {
     return NextResponse.json({
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
     line_items: [{ price: priceId, quantity: 1 }],
     metadata: { requestId: requestId || "draft" },
     success_url: `${appUrl}/portal?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appUrl}/qdro-request?payment=cancelled`
+    cancel_url: `${appUrl}${safeCancelPath}?payment=cancelled`
   });
 
   return NextResponse.json({ url: session.url });

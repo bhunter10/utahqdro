@@ -10,7 +10,7 @@ import {
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { getRequesterIdentity, getRequesterRoleHint } from "@/lib/ai-intake";
-import { demoRequest, intakeSteps } from "@/lib/content";
+import { demoRequest, intakeSteps, qdroConsentText } from "@/lib/content";
 import { formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
 import { auth, db, hasFirebaseConfig } from "@/lib/firebase";
 import type { IntakeField, QdroRequest } from "@/lib/types";
@@ -81,6 +81,15 @@ export function IntakeWizard() {
       if (currentUser?.email) {
         setAccountEmail(currentUser.email);
         setData((current) => current.party1_email ? current : { ...current, party1_email: currentUser.email || "" });
+      } else {
+        window.localStorage.removeItem(storageKey);
+        setActiveStep(-2);
+        setReady({});
+        setData({});
+        setSavedAt("");
+        setSubmitted(false);
+        setAccountEmail("");
+        setDraftRestored(false);
       }
     });
   }, []);
@@ -100,8 +109,7 @@ export function IntakeWizard() {
       const savedOwnerEmail = parsed.ownerEmail || "";
       const currentEmail = clientUser?.email || "";
       const belongsToCurrentUser =
-        !clientUser ||
-        (savedOwnerUid ? savedOwnerUid === clientUser.uid : savedOwnerEmail ? savedOwnerEmail === currentEmail : false);
+        clientUser && (savedOwnerUid ? savedOwnerUid === clientUser.uid : savedOwnerEmail ? savedOwnerEmail === currentEmail : false);
 
       if (belongsToCurrentUser) {
         setData(parsed.data || {});
@@ -117,21 +125,21 @@ export function IntakeWizard() {
   }, [authReady, clientUser, draftRestored]);
 
   useEffect(() => {
-    if (!draftRestored) return;
+    if (!draftRestored || !clientUser) return;
     const handle = window.setTimeout(() => {
       window.localStorage.setItem(
         storageKey,
         JSON.stringify({
           data,
           ready,
-          ownerUid: clientUser?.uid || "",
-          ownerEmail: clientUser?.email || ""
+          ownerUid: clientUser.uid,
+          ownerEmail: clientUser.email || ""
         })
       );
       setSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
     }, 350);
     return () => window.clearTimeout(handle);
-  }, [clientUser?.email, clientUser?.uid, data, draftRestored, ready]);
+  }, [clientUser, data, draftRestored, ready]);
 
   const iraScreeningComplete = isIraScreeningComplete(data);
   const readyComplete = readinessChecks.every((check) => ready[check.id]) && iraScreeningComplete;
@@ -384,10 +392,17 @@ export function IntakeWizard() {
               </div>
               <div className="field" style={{ marginTop: 22 }}>
                 <label>Client signature</label>
-                <small>
-                  I authorize UtahQDRO to use the information submitted in this
-                  request to prepare the QDRO paperwork for admin review.
-                </small>
+                <div className="consent-copy">
+                  <p>{qdroConsentText}</p>
+                </div>
+                <label className="choice consent-agreement">
+                  <input
+                    type="checkbox"
+                    checked={data.engagement_terms_agreed === true}
+                    onChange={(event) => updateField("engagement_terms_agreed", event.target.checked)}
+                  />
+                  <span>I agree to the engagement terms stated above.</span>
+                </label>
                 <SignaturePad
                   value={typeof data.client_signature === "string" ? data.client_signature : ""}
                   onChange={(signature) => updateField("client_signature", signature)}
@@ -401,12 +416,12 @@ export function IntakeWizard() {
                   className="button primary"
                   type="button"
                   onClick={beginCheckout}
-                  disabled={!data.client_signature}
+                  disabled={!data.client_signature || data.engagement_terms_agreed !== true}
                 >
                   Continue to payment
                 </button>
               </div>
-              {!data.client_signature && <p>Please sign before continuing to payment.</p>}
+              {(!data.client_signature || data.engagement_terms_agreed !== true) && <p>Please agree to the terms and sign before continuing to payment.</p>}
               {submitted && (
                 <p>
                   Request saved as <Link className="muted-link" href="/portal">Payment Pending in the client portal</Link>.

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/admin-access";
+import { getRequesterIdentity } from "@/lib/ai-intake";
 import { getAdminAuth, getAdminDb, getAdminStorageBucket } from "@/lib/firebase-admin";
 import type { QdroRequest, RequestStatus } from "@/lib/types";
 
@@ -66,6 +67,62 @@ export async function DELETE(req: Request) {
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : "Could not delete request.", requests: [] },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(req: Request) {
+  try {
+    const authResult = await requireAdmin(req);
+    if (!authResult.ok) return authResult.response;
+
+    const db = getAdminDb();
+    if (!db) {
+      return NextResponse.json({ message: "Firebase Admin is not configured.", requests: [] }, { status: 503 });
+    }
+
+    const body = (await req.json()) as {
+      requestId?: string;
+      fields?: QdroRequest["fields"];
+      notes?: QdroRequest["notes"];
+      status?: RequestStatus;
+      templateFamily?: string;
+    };
+    if (!body.requestId) {
+      return NextResponse.json({ message: "requestId is required.", requests: [] }, { status: 400 });
+    }
+
+    const requestRef = db.collection("requests").doc(body.requestId);
+    const snapshot = await requestRef.get();
+    if (!snapshot.exists) {
+      return NextResponse.json({ message: "Request not found.", requests: [] }, { status: 404 });
+    }
+
+    const current = normalizeRequest(snapshot.id, snapshot.data() || {});
+    const updatedAt = new Date().toISOString();
+    const nextFields = normalizeFields(body.fields || current.fields);
+    const requester = getRequesterIdentity(nextFields, current.clientEmail);
+    const update: Partial<QdroRequest> = {
+      clientName: requester.name || current.clientName,
+      clientEmail: requester.email || current.clientEmail,
+      fields: nextFields,
+      notes: Array.isArray(body.notes) ? body.notes : current.notes,
+      status: normalizeStatus(body.status || current.status),
+      templateFamily: String(body.templateFamily || nextFields.plan_family || current.templateFamily),
+      updatedAt
+    };
+
+    await requestRef.set(update, { merge: true });
+    const updatedSnapshot = await requestRef.get();
+
+    return NextResponse.json({
+      message: "Request changes saved.",
+      request: normalizeRequest(updatedSnapshot.id, updatedSnapshot.data() || {})
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { message: error instanceof Error ? error.message : "Could not save request changes.", requests: [] },
       { status: 500 }
     );
   }

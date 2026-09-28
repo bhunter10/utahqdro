@@ -1,9 +1,3 @@
-import { AdminClient } from "@/components/AdminClient";
-
 export default function AdminPage() {
-  return (
-    <div className="site-shell">
-      <AdminClient mode="login" />
-    </div>
-  );
+  return null;
 }
