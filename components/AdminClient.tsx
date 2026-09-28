@@ -14,7 +14,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } fr
 
 const derivedRequestFieldIds = new Set(["court_county", "district"]);
 type AdminTab = "requests" | "fields" | "templates";
-type AdminAccessState = "checking" | "allowed" | "denied";
+type AdminAccessState = "checking" | "allowed" | "denied" | "error";
 
 function adminTabFromPath(pathname: string): AdminTab {
   if (pathname.startsWith("/admin/fields")) return "fields";
@@ -74,9 +74,9 @@ export function AdminClient() {
           router.replace("/admin/requests");
           return;
         }
-        void loadRequests().then((hasAccess) => {
-          if (!hasAccess) {
-            setAdminAccess("denied");
+        void loadRequests().then((accessState) => {
+          if (accessState !== "allowed") {
+            setAdminAccess(accessState);
             return;
           }
           setAdminAccess("allowed");
@@ -149,9 +149,9 @@ export function AdminClient() {
     }
   }
 
-  async function loadRequests() {
+  async function loadRequests(): Promise<AdminAccessState> {
     const token = await getAdminToken();
-    if (!token) return false;
+    if (!token) return "denied";
 
     try {
       const response = await fetch("/api/admin/requests", {
@@ -160,19 +160,19 @@ export function AdminClient() {
       const result = (await response.json()) as { message?: string; requests?: QdroRequest[] };
       if (!response.ok) {
         setRequestStatus(result.message || "Could not load database requests.");
-        return false;
+        return response.status === 401 || response.status === 403 ? "denied" : "error";
       }
       if (!result.requests?.length) {
         setRequestStatus(result.message || "No database requests found yet. Showing demo requests.");
-        return true;
+        return "allowed";
       }
 
       setRequests(mergeRequests(result.requests, sampleRequests));
       setRequestStatus("");
-      return true;
+      return "allowed";
     } catch (error) {
       setRequestStatus(error instanceof Error ? error.message : "Could not load database requests.");
-      return false;
+      return "error";
     }
   }
 
@@ -431,14 +431,20 @@ export function AdminClient() {
             </section>
           </section>
         </main>
-      ) : adminAccess === "denied" ? (
+      ) : adminAccess === "denied" || adminAccess === "error" ? (
         <main className="page">
           <section className="section admin-shell">
             <section className="panel">
-              <span className="status warn">Access denied</span>
-              <h1 style={{ marginTop: 12 }}>This account is not an admin.</h1>
-              <p className="lead">Sign in with an admin account to manage requests, fields, notes, statuses, and templates.</p>
-              {templateStatus && <p className="template-save-status">{templateStatus}</p>}
+              <span className="status warn">{adminAccess === "denied" ? "Access denied" : "Setup needed"}</span>
+              <h1 style={{ marginTop: 12 }}>
+                {adminAccess === "denied" ? "This account is not an admin." : "Admin setup needs attention."}
+              </h1>
+              <p className="lead">
+                {adminAccess === "denied"
+                  ? "Sign in with an admin account to manage requests, fields, notes, statuses, and templates."
+                  : "The admin server could not load requests. Check the production Firebase Admin settings."}
+              </p>
+              {(requestStatus || templateStatus) && <p className="template-save-status">{requestStatus || templateStatus}</p>}
               <div className="toolbar">
                 <button className="button secondary" type="button" onClick={() => void handleAdminSignOut()}>
                   Sign out
