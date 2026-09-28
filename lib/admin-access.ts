@@ -3,6 +3,8 @@ import type { getAdminDb } from "./firebase-admin";
 
 type AdminDb = NonNullable<ReturnType<typeof getAdminDb>>;
 
+const ownerAdminEmails = ["billyhunter@me.com"];
+
 export async function isAdminUser(decoded: DecodedIdToken, db: AdminDb) {
   if (decoded.role === "admin") return true;
   if (decoded.email && getAdminEmails().has(decoded.email.toLowerCase())) return true;
@@ -13,8 +15,7 @@ export async function isAdminUser(decoded: DecodedIdToken, db: AdminDb) {
 
 function getAdminEmails() {
   return new Set(
-    (process.env.ADMIN_EMAILS || "")
-      .split(",")
+    [...ownerAdminEmails, ...(process.env.ADMIN_EMAILS || "").split(",")]
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean)
   );
