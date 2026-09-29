@@ -160,6 +160,33 @@ export function renderTemplate(template: DocumentTemplate, request: QdroRequest,
   });
 }
 
+const commonShellMergeFields = [
+  "counsel_for",
+  "district",
+  "court_county",
+  "party1_name_upper",
+  "party2_name_upper",
+  "order_title",
+  "entity_account_type",
+  "case_number",
+  "judge_name",
+  "participant_name",
+  "alternate_payee_name"
+];
+
+export function getMissingTemplateFieldValues(request: QdroRequest, templates?: DocumentTemplate[]) {
+  const template = templates ? selectTemplateFromList(request, templates) : selectTemplate(request);
+  const data = deriveDocumentData(request);
+  const mergeFields = new Set([...commonShellMergeFields, ...extractMergeFields(getEditableTemplateBody(template))]);
+
+  return Array.from(mergeFields)
+    .filter((field) => !String(data[field as keyof typeof data] ?? "").trim())
+    .map((field) => ({
+      key: field,
+      label: humanizeMergeField(field)
+    }));
+}
+
 export function getEditableTemplateBody(template: DocumentTemplate) {
   if (template.format === "html") {
     return stripLegacyDocumentShell(template.htmlBody || "");
@@ -228,6 +255,18 @@ function plainTextToTemplateHtml(source: string) {
     .join("\n");
 }
 
+function extractMergeFields(source: string) {
+  return Array.from(source.matchAll(/\{\{([^}]+)\}\}/g), (match) => match[1].trim()).filter(Boolean);
+}
+
+function humanizeMergeField(field: string) {
+  return field
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .replace(/\bSsn\b/g, "SSN")
+    .replace(/\bDob\b/g, "DOB");
+}
+
 function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof deriveDocumentData>, options: { highlightMergeFields?: boolean; wrapBody?: boolean } = {}) {
   const normalizedBody = normalizeDocumentBodyHtml(bodyHtml).trim();
   const bodySection = options.wrapBody === false
@@ -257,45 +296,21 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
     </tbody>
   </table>
 
-  <table style="width: 100%; border-collapse: collapse; table-layout: fixed; border-left: none; border-right: none; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;${captionTableMargin}">
+  <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; table-layout: fixed; border-left: none; border-right: none; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;${captionTableMargin}">
     <colgroup>
       <col style="width: 50%;" />
       <col style="width: 50%;" />
     </colgroup>
     <tbody>
       <tr>
-        <td style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: 1px solid #000000; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
-          <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; color: #000000;">
-            <tbody>
-              <tr>
-                <td style="border: none; padding: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">In the Matter of the Marriage of</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("party1_name_upper")}, and</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("party2_name_upper")}.</td>
-              </tr>
-            </tbody>
-          </table>
+        <td style="width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: 1px solid #000000; padding: 18pt 14pt 18pt 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
+          <p style="margin: 0 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">In the Matter of the Marriage of</p>
+          <p style="margin: 0; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">${merge("party1_name_upper")}, and<br />${merge("party2_name_upper")}.</p>
         </td>
-        <td style="width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: none; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
-          <table cellpadding="0" cellspacing="0" style="width: 100%; padding-left: 12pt; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
-            <tbody>
-              <tr>
-                <td style="border: none; padding: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("order_title")}</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Re: ${merge("entity_account_type")}</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Case No. ${merge("case_number")}</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Judge ${merge("judge_name")}</td>
-              </tr>
-            </tbody>
-          </table>
+        <td style="width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: none; padding: 18pt 0 18pt 14pt; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
+          <p style="margin: 0 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">${merge("order_title")}</p>
+          <p style="margin: 0 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">Re: ${merge("entity_account_type")}<br />Case No. ${merge("case_number")}</p>
+          <p style="margin: 0; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">Judge ${merge("judge_name")}</p>
         </td>
       </tr>
     </tbody>

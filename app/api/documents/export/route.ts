@@ -30,13 +30,18 @@ export async function POST(req: Request) {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Google Docs export failed.";
-      return NextResponse.json(
+      const needsGoogleConnection = error instanceof GoogleConnectionError || message.includes("Google Drive is not connected");
+      const response = NextResponse.json(
         {
           message,
           requestId: request.id
         },
-        { status: message.includes("Google Drive is not connected") ? 401 : 501 }
+        { status: needsGoogleConnection ? 401 : 501 }
       );
+      if (needsGoogleConnection) {
+        response.cookies.delete("google_refresh_token");
+      }
+      return response;
     }
   }
 
@@ -141,8 +146,13 @@ async function getGoogleAccessToken(refreshToken: string) {
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Google authentication failed: ${detail}`);
+    const detail = await readGoogleTokenError(response);
+    if (detail.error === "invalid_grant") {
+      throw new GoogleConnectionError(
+        "Google Drive needs to be reconnected. Click Connect Google Drive, complete the Google sign-in, then create the Google Doc again."
+      );
+    }
+    throw new Error(`Google authentication failed: ${detail.description}`);
   }
 
   const token = (await response.json()) as { access_token?: string };
@@ -150,6 +160,29 @@ async function getGoogleAccessToken(refreshToken: string) {
     throw new Error("Google authentication did not return an access token.");
   }
   return token.access_token;
+}
+
+class GoogleConnectionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GoogleConnectionError";
+  }
+}
+
+async function readGoogleTokenError(response: Response) {
+  const fallback = await response.text();
+  try {
+    const parsed = JSON.parse(fallback) as { error?: string; error_description?: string };
+    return {
+      error: parsed.error || "",
+      description: parsed.error_description || fallback
+    };
+  } catch {
+    return {
+      error: "",
+      description: fallback
+    };
+  }
 }
 
 function googleDocHtmlShell(documentHtml: string) {

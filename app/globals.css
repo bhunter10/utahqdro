@@ -1318,6 +1318,51 @@ th {
   gap: 10px;
 }
 
+.preview-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.missing-field-status {
+  cursor: help;
+  position: relative;
+}
+
+.missing-field-status::after {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 5;
+  box-sizing: border-box;
+  display: block;
+  width: max-content;
+  max-width: min(360px, 80vw);
+  transform: translateY(-2px);
+  border: 1px solid #d97706;
+  border-radius: 6px;
+  background: #fffbeb;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  color: #7c2d12;
+  content: attr(data-missing-fields);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  opacity: 0;
+  padding: 8px 10px;
+  pointer-events: none;
+  text-align: left;
+  transition: opacity 140ms ease, transform 140ms ease;
+  white-space: normal;
+}
+
+.missing-field-status:hover::after,
+.missing-field-status:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .preview-action-status {
   max-width: 620px;
   margin-bottom: 0;

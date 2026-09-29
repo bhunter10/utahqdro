@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { renderDocumentHtml } from "@/lib/document-engine";
+import { getMissingTemplateFieldValues, renderDocumentHtml } from "@/lib/document-engine";
 import type { DocumentTemplate, QdroRequest } from "@/lib/types";
 
 export function DocumentPreview({
@@ -19,6 +19,15 @@ export function DocumentPreview({
     () => renderDocumentHtml(request, false, { highlightMergeFields: true, includeTemplateLabel: false, templates }),
     [request, templates]
   );
+  const missingFieldValues = useMemo(
+    () => getMissingTemplateFieldValues(request, templates),
+    [request, templates]
+  );
+  const missingFieldStatus = `${missingFieldValues.length} missing ${missingFieldValues.length === 1 ? "value" : "values"}`;
+  const missingFieldTooltip = missingFieldValues.length
+    ? `Missing: ${missingFieldValues.map((field) => field.label).join(", ")}`
+    : "No missing field values.";
+  const missingFieldStatusClass = missingFieldValues.length ? "warn" : "";
 
   async function createGoogleDoc() {
     setIsCreatingGoogleDoc(true);
@@ -50,7 +59,17 @@ export function DocumentPreview({
     <section className="panel">
       <div className="section-head">
         <div>
-          <span className="status info">Live preview</span>
+          <div className="preview-status-row">
+            <span className="status info">Live preview</span>
+            <span
+              className={`status ${missingFieldStatusClass} missing-field-status`}
+              data-missing-fields={missingFieldTooltip}
+              aria-label={missingFieldTooltip}
+              tabIndex={0}
+            >
+              {missingFieldStatus}
+            </span>
+          </div>
           {googleDocStatus && (
             <p className="preview-action-status">
               {googleDocStatus} {googleDocUrl && <a className="muted-link" href={googleDocUrl} target="_blank">Open Google Doc</a>}
