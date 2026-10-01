@@ -307,7 +307,7 @@ p {
 }
 
 .hero-point .icon {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--success);
   color: white;
 }
 
