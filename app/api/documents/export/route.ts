@@ -145,6 +145,8 @@ async function loadDatabaseTemplates() {
       id: doc.id,
       name: String(data.name || ""),
       family: String(data.family || ""),
+      planFamilies: Array.isArray(data.planFamilies) ? data.planFamilies.filter((family) => typeof family === "string") : undefined,
+      accountTypes: Array.isArray(data.accountTypes) ? data.accountTypes.filter((accountType) => typeof accountType === "string") : undefined,
       version: Number(data.version || 1),
       description: String(data.description || ""),
       format: data.format === "html" || data.format === "plain" ? data.format : undefined,

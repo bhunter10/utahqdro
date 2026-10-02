@@ -60,6 +60,7 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
       year: "numeric"
     }).format(new Date()),
     order_title: `${amendedText ? `${amendedText} ` : ""}QUALIFIED DOMESTIC RELATIONS ORDER`,
+    order_reference: `${amendedText ? `${amendedText} ` : ""}Order`,
     counsel_for: value(request.fields, "prepared_for") || request.clientName,
     party1_name: party1Name,
     party1_name_upper: party1Name.toUpperCase(),
@@ -143,20 +144,51 @@ export function selectTemplate(request: QdroRequest): DocumentTemplate {
 }
 
 export function selectTemplateFromList(request: QdroRequest, templates: DocumentTemplate[]): DocumentTemplate {
+  const activeTemplates = templates.filter((template) => template.active);
   const fallbackTemplate =
-    templates.find((template) => template.id === "general-v1" && template.active) ||
-    templates.find((template) => template.family === "Multi-template / other" && template.active) ||
+    activeTemplates.find((template) => template.id === "general-v1") ||
+    activeTemplates.find((template) => template.family === "Multi-template / other") ||
     documentTemplates.find((template) => template.id === "general-v1" && template.active) ||
     documentTemplates.find((template) => template.family === "Multi-template / other" && template.active) ||
-    templates.find((template) => template.active) ||
+    activeTemplates[0] ||
     documentTemplates.find((template) => template.active) ||
     documentTemplates[0];
+  const requestedFamilies = [request.templateFamily, String(request.fields.plan_family || "")]
+    .map((family) => family.trim())
+    .filter(Boolean);
+  const accountType = String(request.fields.account_type || "").trim();
+  const familyMatches = activeTemplates.filter((template) =>
+    requestedFamilies.some((family) => templateMatchesFamily(template, family))
+  );
+  const accountTypeMatch = familyMatches.find((template) => templateMatchesAccountType(template, accountType));
 
   return (
-    templates.find((template) => template.family === request.templateFamily && template.active) ||
-    templates.find((template) => template.family === String(request.fields.plan_family) && template.active) ||
+    accountTypeMatch ||
+    familyMatches.find((template) => !template.accountTypes?.length) ||
+    familyMatches[0] ||
     fallbackTemplate
   );
+}
+
+function templateMatchesFamily(template: DocumentTemplate, family: string) {
+  return template.family === family || Boolean(template.planFamilies?.includes(family));
+}
+
+function templateMatchesAccountType(template: DocumentTemplate, accountType: string) {
+  if (!template.accountTypes?.length || !accountType) return false;
+  const normalizedAccountType = normalizeTemplateMatchValue(accountType);
+  return template.accountTypes.some((templateAccountType) => {
+    const normalizedTemplateAccountType = normalizeTemplateMatchValue(templateAccountType);
+    return (
+      normalizedAccountType === normalizedTemplateAccountType ||
+      normalizedAccountType.includes(normalizedTemplateAccountType) ||
+      normalizedTemplateAccountType.includes(normalizedAccountType)
+    );
+  });
+}
+
+function normalizeTemplateMatchValue(valueToNormalize: string) {
+  return valueToNormalize.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 type RenderDocumentOptions = {
@@ -533,7 +565,7 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
       <tr>
         <td style="width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: 1px solid #000000; padding: 18pt 12pt 18pt 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
           <p style="margin: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">In the Matter of the Marriage of</p>
-          <p style="margin: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("party1_name_upper")}, and${merge("party2_name_upper")}.</p>
+          <p style="margin: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("party1_name_upper")}, and<br />${merge("party2_name_upper")}.</p>
         </td>
         <td style="width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: none; padding: 18pt 0 18pt 14pt; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
           <p style="margin: 0 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">${merge("order_title")}</p>

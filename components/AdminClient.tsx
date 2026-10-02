@@ -586,7 +586,9 @@ export function AdminClient() {
                 <div className="template-library-meta">
                   <span className="status">{selectedTemplate.active ? "active" : "inactive"}</span>
                   <span className="status info">{selectedTemplate.format || "plain"}</span>
-                  <small>Family: {selectedTemplate.family} · Version {selectedTemplate.version}</small>
+                  <small>
+                    Family: {selectedTemplate.family === "Supplemental: Appearance of Counsel" ? "Appearance of Counsel" : selectedTemplate.family} · Version {selectedTemplate.version}
+                  </small>
                 </div>
                 {selectedTemplate.description &&
                   selectedTemplate.description !== "Defined contribution order for Fidelity-administered plans." && (

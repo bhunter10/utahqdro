@@ -1579,13 +1579,13 @@ th {
 }
 
 .template-editor-head label {
-  color: #344054;
+  color: #000000;
   font-size: 14px;
   font-weight: 800;
 }
 
 .template-editor-head span {
-  color: var(--muted);
+  color: #000000;
   font-size: 13px;
 }
 
@@ -1686,11 +1686,15 @@ th {
   border-radius: 0;
   background: #ffffff;
   padding: 28px 32px;
-  color: #101828;
+  color: #000000;
   font-family: Georgia, "Times New Roman", serif;
   font-size: 16px;
   line-height: 1.65;
   outline: none;
+}
+
+.template-body-editor * {
+  color: #000000 !important;
 }
 
 .template-body-editor p,

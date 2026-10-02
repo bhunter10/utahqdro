@@ -98,6 +98,8 @@ export type DocumentTemplate = {
   id: string;
   name: string;
   family: string;
+  planFamilies?: string[];
+  accountTypes?: string[];
   version: number;
   description: string;
   format?: "plain" | "html";

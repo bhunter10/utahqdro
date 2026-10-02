@@ -1,5 +1,7 @@
 import { appearanceOfCounselHtmlTemplate, appearanceOfCounselMergeFields } from "./templates/appearance-of-counsel";
+import { dmba401kHtmlTemplate, dmbaMergeFields, dmbaPensionHtmlTemplate } from "./templates/dmba";
 import { fidelityHtmlTemplate, fidelityMergeFields } from "./templates/fidelity";
+import { ihc401kHtmlTemplate, ihcMergeFields, ihcPensionHtmlTemplate, tRowePriceIhc401kHtmlTemplate } from "./templates/ihc";
 import { withdrawalOfCounselHtmlTemplate, withdrawalOfCounselMergeFields } from "./templates/withdrawal-of-counsel";
 import type { DocumentTemplate, IntakeStep, QdroRequest, RequestStatus } from "./types";
 import { utahCourtOptions } from "./utah-courts";
@@ -379,6 +381,71 @@ export const documentTemplates: DocumentTemplate[] = [
     format: "html",
     htmlBody: fidelityHtmlTemplate,
     mergeFields: fidelityMergeFields
+  },
+  {
+    id: "dmba-401k-v1",
+    name: "DMBA 401k QDRO",
+    family: "DMBA",
+    planFamilies: ["DMBA"],
+    accountTypes: ["401k plan"],
+    version: 1,
+    active: true,
+    description: "Deseret 401(k) Plan order for DMBA-administered accounts.",
+    format: "html",
+    htmlBody: dmba401kHtmlTemplate,
+    mergeFields: dmbaMergeFields
+  },
+  {
+    id: "dmba-pension-v1",
+    name: "DMBA Pension QDRO",
+    family: "DMBA",
+    planFamilies: ["DMBA"],
+    accountTypes: ["Pension"],
+    version: 1,
+    active: true,
+    description: "Deseret Mutual Master Retirement Plan order for DMBA pension benefits.",
+    format: "html",
+    htmlBody: dmbaPensionHtmlTemplate,
+    mergeFields: dmbaMergeFields
+  },
+  {
+    id: "ihc-401k-v1",
+    name: "IHC 401k QDRO",
+    family: "IHC",
+    planFamilies: ["IHC"],
+    accountTypes: ["401k plan"],
+    version: 1,
+    active: true,
+    description: "Intermountain Healthcare Savings Plus 401(k) Plan order.",
+    format: "html",
+    htmlBody: ihc401kHtmlTemplate,
+    mergeFields: ihcMergeFields
+  },
+  {
+    id: "ihc-pension-v1",
+    name: "IHC Pension QDRO",
+    family: "IHC",
+    planFamilies: ["IHC"],
+    accountTypes: ["Pension"],
+    version: 1,
+    active: true,
+    description: "Intermountain Healthcare Pension Plan order.",
+    format: "html",
+    htmlBody: ihcPensionHtmlTemplate,
+    mergeFields: ihcMergeFields
+  },
+  {
+    id: "troweprice-ihc-401k-v1",
+    name: "T.RowePrice IHC 401k QDRO",
+    family: "T.RowePrice",
+    planFamilies: ["T.RowePrice"],
+    accountTypes: ["401k plan"],
+    version: 1,
+    active: true,
+    description: "T.RowePrice IHC 401(k) order with QDRO Consultants submission address.",
+    format: "html",
+    htmlBody: tRowePriceIhc401kHtmlTemplate,
+    mergeFields: ihcMergeFields
   },
   {
     id: "appearance-of-counsel-v1",
