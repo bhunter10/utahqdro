@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getRequesterIdentity, normalizeAiFieldValue } from "@/lib/ai-intake";
 import { intakeSteps, sampleRequests, statuses } from "@/lib/content";
-import { getEditableTemplateBody } from "@/lib/document-engine";
+import { getEditableTemplateBody, selectTemplateFromList } from "@/lib/document-engine";
 import { formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
 import { auth, missingFirebaseConfig } from "@/lib/firebase";
 import type { DocumentTemplate, IntakeField, QdroRequest, RequestFile, RequestStatus } from "@/lib/types";
@@ -12,7 +12,18 @@ import { findUtahCourt } from "@/lib/utah-courts";
 import { DocumentPreview } from "./DocumentPreview";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 
-const derivedRequestFieldIds = new Set(["court_county", "district"]);
+const derivedRequestFieldIds = new Set(["amended_text", "court_county", "district", "prepared_for"]);
+const adminDocumentFields: IntakeField[] = [
+  {
+    id: "amended_text",
+    label: "Amended text",
+    type: "text",
+    fullWidth: true,
+    constrained: true,
+    placeholder: "Example: AMENDED",
+    help: "Optional. Used in generated document titles and references, such as AMENDED QUALIFIED DOMESTIC RELATIONS ORDER."
+  }
+];
 type AdminTab = "requests" | "fields" | "templates";
 type AdminAccessState = "checking" | "allowed" | "denied" | "error";
 
@@ -199,6 +210,7 @@ export function AdminClient() {
           ? {
               ...request,
               fields: getUpdatedRequestFields(request.fields, field, value),
+              templateFamily: field === "plan_family" ? value : request.templateFamily,
               updatedAt: new Date().toISOString()
             }
           : request
@@ -578,7 +590,7 @@ export function AdminClient() {
                   >
                     {templates.map((template) => (
                       <option key={template.id} value={template.id}>
-                        {template.name}
+                        {getTemplatePickerLabel(template.name)}
                       </option>
                     ))}
                   </select>
@@ -814,6 +826,7 @@ function RequestDetailModal({
 }) {
   const [showPreview, setShowPreview] = useState(false);
   const requester = getRequesterIdentity(request.fields, request.clientEmail);
+  const selectedPreviewTemplate = selectTemplateFromList(request, templates);
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -826,10 +839,13 @@ function RequestDetailModal({
       >
         <div className="modal-head">
           <div>
-            <span className="status info">{request.id}</span>
+            <span className="status info">{getEntityType(request)} · {getAccountType(request)}</span>
             <h2 id="request-modal-title" style={{ marginTop: 12 }}>{requester.name || request.clientName}</h2>
             <p>
               {requester.email || request.clientEmail} · {getEntityType(request)} · Total {formatCurrency(getRequestTotal(request))}
+            </p>
+            <p>
+              Template: {selectedPreviewTemplate.name} · Request ID: {request.id}
             </p>
           </div>
           <div className="modal-head-actions">
@@ -933,6 +949,22 @@ function RequestEditor({
           </select>
         </div>
         <InternalNotes request={request} updateInternalNotes={updateInternalNotes} />
+        <section className="admin-intake-step">
+          <div>
+            <span className="status info">Document settings</span>
+            <p>Backend-only values used when generating and exporting documents.</p>
+          </div>
+          <div className="field-grid">
+            {adminDocumentFields.map((field) => (
+              <AdminFieldControl
+                field={field}
+                key={field.id}
+                request={request}
+                updateField={updateField}
+              />
+            ))}
+          </div>
+        </section>
         {request.files.length > 0 && (
           <section className="admin-intake-step">
             <div>
@@ -1325,6 +1357,10 @@ function getEntityType(request: QdroRequest) {
 
 function getAccountType(request: QdroRequest) {
   return String(request.fields.account_type || "—");
+}
+
+function getTemplatePickerLabel(templateName: string) {
+  return templateName.replace(/\s+QDRO$/i, "");
 }
 
 function mergeRequests(primary: QdroRequest[], fallback: QdroRequest[]) {

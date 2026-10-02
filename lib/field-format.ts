@@ -18,11 +18,26 @@ export function formatPhoneInput(value: string) {
 
 export function formatLongDate(value: string) {
   if (!value) return "";
-  const date = new Date(`${value}T00:00:00`);
+  const date = parseLocalDate(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric"
   }).format(date);
+}
+
+function parseLocalDate(value: string) {
+  const trimmedValue = value.trim();
+  const isoMatch = trimmedValue.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+  }
+
+  const usMatch = trimmedValue.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (usMatch) {
+    return new Date(Number(usMatch[3]), Number(usMatch[1]) - 1, Number(usMatch[2]));
+  }
+
+  return new Date(`${trimmedValue}T00:00:00`);
 }

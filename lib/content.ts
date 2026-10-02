@@ -1,7 +1,10 @@
 import { appearanceOfCounselHtmlTemplate, appearanceOfCounselMergeFields } from "./templates/appearance-of-counsel";
 import { dmba401kHtmlTemplate, dmbaMergeFields, dmbaPensionHtmlTemplate } from "./templates/dmba";
+import { empowerHtmlTemplate, empowerMergeFields } from "./templates/empower";
 import { fidelityHtmlTemplate, fidelityMergeFields } from "./templates/fidelity";
 import { ihc401kHtmlTemplate, ihcMergeFields, ihcPensionHtmlTemplate, tRowePriceIhc401kHtmlTemplate } from "./templates/ihc";
+import { principal401kHtmlTemplate, principalMergeFields } from "./templates/principal";
+import { ursDefinedContributionHtmlTemplate, ursDefinedContributionMergeFields, ursPensionHtmlTemplate, ursPensionMergeFields } from "./templates/urs";
 import { withdrawalOfCounselHtmlTemplate, withdrawalOfCounselMergeFields } from "./templates/withdrawal-of-counsel";
 import type { DocumentTemplate, IntakeStep, QdroRequest, RequestStatus } from "./types";
 import { utahCourtOptions } from "./utah-courts";
@@ -372,6 +375,19 @@ export const intakeSteps: IntakeStep[] = [
 
 export const documentTemplates: DocumentTemplate[] = [
   {
+    id: "empower-401k-v1",
+    name: "Empower 401k QDRO",
+    family: "Empower",
+    planFamilies: ["Empower"],
+    accountTypes: ["401k plan"],
+    version: 1,
+    active: true,
+    description: "Empower 401(k) order routed for Empower 401k plan requests.",
+    format: "html",
+    htmlBody: empowerHtmlTemplate,
+    mergeFields: empowerMergeFields
+  },
+  {
     id: "fidelity-v1",
     name: "Fidelity QDRO",
     family: "Fidelity",
@@ -446,6 +462,45 @@ export const documentTemplates: DocumentTemplate[] = [
     format: "html",
     htmlBody: tRowePriceIhc401kHtmlTemplate,
     mergeFields: ihcMergeFields
+  },
+  {
+    id: "principal-401k-v1",
+    name: "Principal 401k QDRO",
+    family: "Principal",
+    planFamilies: ["Principal"],
+    accountTypes: ["401k plan"],
+    version: 1,
+    active: true,
+    description: "Principal 401(k) order for Principal plan requests.",
+    format: "html",
+    htmlBody: principal401kHtmlTemplate,
+    mergeFields: principalMergeFields
+  },
+  {
+    id: "urs-defined-contribution-v1",
+    name: "URS Defined Contribution DRO",
+    family: "URS",
+    planFamilies: ["URS"],
+    accountTypes: ["401k plan", "457 plan", "IRA Roth", "IRA Traditional", "IRA SEP"],
+    version: 1,
+    active: true,
+    description: "Utah Retirement Systems defined contribution savings plan DRO.",
+    format: "html",
+    htmlBody: ursDefinedContributionHtmlTemplate,
+    mergeFields: ursDefinedContributionMergeFields
+  },
+  {
+    id: "urs-pension-v1",
+    name: "URS Pension DRO",
+    family: "URS",
+    planFamilies: ["URS"],
+    accountTypes: ["Pension"],
+    version: 1,
+    active: true,
+    description: "Utah Retirement Systems defined benefit pension DRO.",
+    format: "html",
+    htmlBody: ursPensionHtmlTemplate,
+    mergeFields: ursPensionMergeFields
   },
   {
     id: "appearance-of-counsel-v1",

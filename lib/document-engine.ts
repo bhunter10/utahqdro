@@ -18,7 +18,7 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
   const party1 = {
     name: party1Name,
     ssn: value(request.fields, "party1_ssn"),
-    dob: value(request.fields, "party1_dob"),
+    dob: formatLongDate(value(request.fields, "party1_dob")),
     email: value(request.fields, "party1_email"),
     phone: value(request.fields, "party1_phone"),
     address: formatMailingAddress(request.fields, "party1")
@@ -26,7 +26,7 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
   const party2 = {
     name: party2Name,
     ssn: value(request.fields, "party2_ssn"),
-    dob: value(request.fields, "party2_dob"),
+    dob: formatLongDate(value(request.fields, "party2_dob")),
     email: value(request.fields, "party2_email"),
     phone: value(request.fields, "party2_phone"),
     address: formatMailingAddress(request.fields, "party2")
@@ -43,9 +43,7 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
         ? `${percentAward || "50"}%`
         : "50%";
   const amendedText = value(request.fields, "amended_text");
-  const entityAccountType = [value(request.fields, "entity_name"), value(request.fields, "account_type")]
-    .filter(Boolean)
-    .join(" ") || value(request.fields, "formal_plan_name");
+  const entityAccountType = formatPlanReference(request);
 
   return {
     case_number: value(request.fields, "case_number"),
@@ -61,7 +59,7 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     }).format(new Date()),
     order_title: `${amendedText ? `${amendedText} ` : ""}QUALIFIED DOMESTIC RELATIONS ORDER`,
     order_reference: `${amendedText ? `${amendedText} ` : ""}Order`,
-    counsel_for: value(request.fields, "prepared_for") || request.clientName,
+    counsel_for: request.clientName,
     party1_name: party1Name,
     party1_name_upper: party1Name.toUpperCase(),
     party1_email: party1.email,
@@ -69,7 +67,10 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     party2_name_upper: party2Name.toUpperCase(),
     party2_email: party2.email,
     entity_account_type: entityAccountType,
+    legal_plan_heading: getLegalPlanHeading(request),
     account_type: value(request.fields, "account_type"),
+    urs_plan_types: value(request.fields, "account_type") || "URS DC Savings Plan",
+    urs_percent_amount: divisionType === "Percentage" ? `${percentAward || "50"}%` : "50%",
     employer_name: value(request.fields, "employer_name") || "to be confirmed",
     employer_phone: value(request.fields, "employer_phone"),
     employer_full_address: formatMailingAddress(request.fields, "employer"),
@@ -93,6 +94,7 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     percent_amount: divisionType === "Fixed amount" && fixedAward ? formatCurrencyValue(fixedAward) : `${percentAward || "50"}%`,
     valuation_date: formatLongDate(value(request.fields, "valuation_date")) || "the Date of Transfer",
     adjust_market: getMarketAdjustmentText(value(request.fields, "market_adjustment")),
+    adjust_market_shall: getMarketAdjustmentShallText(value(request.fields, "market_adjustment")),
     special_terms: value(request.fields, "special_terms") || "None stated."
   };
 }
@@ -103,10 +105,57 @@ function normalizePartyChoice(choice: string) {
   return choice === "Party 1" || choice === "Party 2" ? choice : "";
 }
 
+function formatPlanReference(request: QdroRequest) {
+  const fields = request.fields;
+  const entityName = value(fields, "entity_name");
+  const rawPlanFamily = value(fields, "plan_family") || request.templateFamily;
+  const rawAccountType = value(fields, "account_type");
+  if (rawPlanFamily === "URS" && rawAccountType === "Pension") return "URS Pension";
+
+  const planFamily = formatPlanFamilyName(rawPlanFamily);
+  const accountType = formatPlanReferenceAccountType(rawAccountType);
+  const provider = entityName || planFamily;
+  const reference = [provider, accountType].filter(Boolean).join(" ");
+
+  return reference || value(fields, "formal_plan_name");
+}
+
+function getLegalPlanHeading(request: QdroRequest) {
+  if (value(request.fields, "plan_family") === "URS" && value(request.fields, "account_type") === "Pension") {
+    return "URS DEFINED BENEFIT PLAN";
+  }
+
+  return "";
+}
+
+function formatPlanFamilyName(planFamily: string) {
+  const familyNames: Record<string, string> = {
+    URS: "Utah Retirement Systems"
+  };
+
+  return familyNames[planFamily] || planFamily;
+}
+
+function formatPlanReferenceAccountType(accountType: string) {
+  const accountTypeNames: Record<string, string> = {
+    "401k plan": "401k",
+    "403b plan": "403b",
+    "457 plan": "457"
+  };
+
+  return accountTypeNames[accountType] || accountType;
+}
+
 function getMarketAdjustmentText(adjustment: string) {
   const normalized = adjustment.toLowerCase();
   if (normalized.includes("excluded") || normalized === "no") return "is not";
   return "is";
+}
+
+function getMarketAdjustmentShallText(adjustment: string) {
+  const normalized = adjustment.toLowerCase();
+  if (normalized.includes("excluded") || normalized === "no") return "shall not";
+  return "shall";
 }
 
 function formatCurrencyValue(amount: string) {
@@ -153,13 +202,14 @@ export function selectTemplateFromList(request: QdroRequest, templates: Document
     activeTemplates[0] ||
     documentTemplates.find((template) => template.active) ||
     documentTemplates[0];
-  const requestedFamilies = [request.templateFamily, String(request.fields.plan_family || "")]
+  const currentPlanFamily = String(request.fields.plan_family || "").trim();
+  const requestedFamilies = [currentPlanFamily || request.templateFamily]
     .map((family) => family.trim())
     .filter(Boolean);
   const accountType = String(request.fields.account_type || "").trim();
-  const familyMatches = activeTemplates.filter((template) =>
-    requestedFamilies.some((family) => templateMatchesFamily(template, family))
-  );
+  const familyMatches = activeTemplates
+    .filter((template) => requestedFamilies.some((family) => templateMatchesFamily(template, family)))
+    .sort((first, second) => Number(Boolean(second.accountTypes?.length)) - Number(Boolean(first.accountTypes?.length)));
   const accountTypeMatch = familyMatches.find((template) => templateMatchesAccountType(template, accountType));
 
   return (
@@ -177,14 +227,7 @@ function templateMatchesFamily(template: DocumentTemplate, family: string) {
 function templateMatchesAccountType(template: DocumentTemplate, accountType: string) {
   if (!template.accountTypes?.length || !accountType) return false;
   const normalizedAccountType = normalizeTemplateMatchValue(accountType);
-  return template.accountTypes.some((templateAccountType) => {
-    const normalizedTemplateAccountType = normalizeTemplateMatchValue(templateAccountType);
-    return (
-      normalizedAccountType === normalizedTemplateAccountType ||
-      normalizedAccountType.includes(normalizedTemplateAccountType) ||
-      normalizedTemplateAccountType.includes(normalizedAccountType)
-    );
-  });
+  return template.accountTypes.some((templateAccountType) => normalizedAccountType === normalizeTemplateMatchValue(templateAccountType));
 }
 
 function normalizeTemplateMatchValue(valueToNormalize: string) {
@@ -216,6 +259,7 @@ const commonShellMergeFields = [
   "party1_name_upper",
   "party2_name_upper",
   "order_title",
+  "legal_plan_heading",
   "entity_account_type",
   "case_number",
   "judge_name",
@@ -537,6 +581,9 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
     ? `<p style="margin: 0 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000;">&nbsp;</p>`
     : "";
   const merge = (key: keyof typeof data) => renderMergedValue(String(data[key] ?? ""), options.highlightMergeFields, key);
+  const legalPlanHeading = String(data.legal_plan_heading || "").trim()
+    ? `<p style="margin: 0 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">${merge("legal_plan_heading")}</p>`
+    : "";
 
   return `<p style="margin: 0 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000;">David J. Hunter (9015)<br />
     3915 Timpview Dr., Provo, UT 84604<br />
@@ -569,8 +616,9 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
         </td>
         <td style="width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: none; padding: 18pt 0 18pt 14pt; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
           <p style="margin: 0 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">${merge("order_title")}</p>
-          <p style="margin: 0 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">Re: ${merge("entity_account_type")}<br />Case No. ${merge("case_number")}</p>
-          <p style="margin: 0; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">Judge ${merge("judge_name")}</p>
+          ${legalPlanHeading}
+          <p style="margin: 0 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">Re: ${merge("entity_account_type")}</p>
+          <p style="margin: 0; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">Case No. ${merge("case_number")}<br />Judge ${merge("judge_name")}</p>
         </td>
       </tr>
     </tbody>
