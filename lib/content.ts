@@ -1,4 +1,6 @@
+import { appearanceOfCounselHtmlTemplate, appearanceOfCounselMergeFields } from "./templates/appearance-of-counsel";
 import { fidelityHtmlTemplate, fidelityMergeFields } from "./templates/fidelity";
+import { withdrawalOfCounselHtmlTemplate, withdrawalOfCounselMergeFields } from "./templates/withdrawal-of-counsel";
 import type { DocumentTemplate, IntakeStep, QdroRequest, RequestStatus } from "./types";
 import { utahCourtOptions } from "./utah-courts";
 
@@ -377,6 +379,28 @@ export const documentTemplates: DocumentTemplate[] = [
     format: "html",
     htmlBody: fidelityHtmlTemplate,
     mergeFields: fidelityMergeFields
+  },
+  {
+    id: "appearance-of-counsel-v1",
+    name: "Appearance of Counsel",
+    family: "Supplemental: Appearance of Counsel",
+    version: 1,
+    active: true,
+    description: "Standalone limited appearance document generated with every QDRO request.",
+    format: "html",
+    htmlBody: appearanceOfCounselHtmlTemplate,
+    mergeFields: appearanceOfCounselMergeFields
+  },
+  {
+    id: "withdrawal-of-counsel-v1",
+    name: "Withdrawal of Counsel",
+    family: "Supplemental: Withdrawal of Counsel",
+    version: 1,
+    active: true,
+    description: "Standalone withdrawal document generated with every QDRO request.",
+    format: "html",
+    htmlBody: withdrawalOfCounselHtmlTemplate,
+    mergeFields: withdrawalOfCounselMergeFields
   },
   {
     id: "general-v1",

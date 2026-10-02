@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/admin-access";
+import { documentTemplates } from "@/lib/content";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import type { DocumentTemplate } from "@/lib/types";
 
@@ -25,13 +26,14 @@ export async function GET(req: Request) {
     if (snapshot.empty) {
       return NextResponse.json({
         message: "No templates are saved in Firestore yet.",
-        templates: []
+        templates: documentTemplates
       });
     }
 
+    const savedTemplates = snapshot.docs.map((doc) => normalizeTemplate(doc.id, doc.data()));
+
     return NextResponse.json({
-      templates: snapshot.docs
-        .map((doc) => normalizeTemplate(doc.id, doc.data()))
+      templates: mergeDefaultTemplates(savedTemplates)
         .sort((first, second) => first.family.localeCompare(second.family) || first.version - second.version)
     });
   } catch (error) {
@@ -62,7 +64,9 @@ export async function PUT(req: Request) {
 
     const templateRef = db.collection(collectionName).doc(body.templateId);
     const existing = await templateRef.get();
-    const existingTemplate = existing.exists ? normalizeTemplate(existing.id, existing.data() || {}) : null;
+    const existingTemplate = existing.exists
+      ? normalizeTemplate(existing.id, existing.data() || {})
+      : documentTemplates.find((template) => template.id === body.templateId) || null;
 
     if (!existingTemplate) {
       return NextResponse.json({ message: "Template not found." }, { status: 404 });
@@ -155,6 +159,12 @@ function normalizeTemplate(id: string, data: FirebaseFirestore.DocumentData): Do
     mergeFields: Array.isArray(data.mergeFields) ? data.mergeFields.filter((field) => typeof field === "string") : undefined,
     active: Boolean(data.active)
   };
+}
+
+function mergeDefaultTemplates(savedTemplates: DocumentTemplate[]) {
+  const templatesById = new Map(documentTemplates.map((template) => [template.id, template]));
+  savedTemplates.forEach((template) => templatesById.set(template.id, template));
+  return Array.from(templatesById.values());
 }
 
 function toFirestoreTemplate(template: DocumentTemplate & { updatedAt: string; updatedBy: string }) {

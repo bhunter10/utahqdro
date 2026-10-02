@@ -1,8 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { getMissingTemplateFieldValues, renderDocumentHtml } from "@/lib/document-engine";
+import { useEffect, useMemo, useState } from "react";
+import {
+  getMissingPreviewDocumentFieldValues,
+  renderAppearanceOfCounselHtml,
+  renderDocumentHtml,
+  renderWithdrawalOfCounselHtml
+} from "@/lib/document-engine";
 import type { DocumentTemplate, QdroRequest } from "@/lib/types";
+
+type PreviewDocumentType = "qdro" | "appearance" | "withdrawal";
+type GoogleDocResult = {
+  status: string;
+  url: string;
+};
 
 export function DocumentPreview({
   request,
@@ -11,45 +22,85 @@ export function DocumentPreview({
   request: QdroRequest;
   templates?: DocumentTemplate[];
 }) {
-  const [googleDocStatus, setGoogleDocStatus] = useState("");
-  const [googleDocUrl, setGoogleDocUrl] = useState("");
+  const [googleDocResults, setGoogleDocResults] = useState<Partial<Record<PreviewDocumentType, GoogleDocResult>>>({});
   const [needsGoogleConnection, setNeedsGoogleConnection] = useState(false);
   const [isCreatingGoogleDoc, setIsCreatingGoogleDoc] = useState(false);
+  const [activeDocument, setActiveDocument] = useState<PreviewDocumentType>("qdro");
+  const activeGoogleDoc = googleDocResults[activeDocument];
   const html = useMemo(
-    () => renderDocumentHtml(request, false, { highlightMergeFields: true, includeTemplateLabel: false, templates }),
-    [request, templates]
+    () => {
+      const previewOptions = { highlightMergeFields: true, includeTemplateLabel: false, templates };
+      if (activeDocument === "appearance") {
+        return renderAppearanceOfCounselHtml(request, false, previewOptions);
+      }
+      if (activeDocument === "withdrawal") {
+        return renderWithdrawalOfCounselHtml(request, false, previewOptions);
+      }
+      return renderDocumentHtml(request, false, previewOptions);
+    },
+    [activeDocument, request, templates]
   );
   const missingFieldValues = useMemo(
-    () => getMissingTemplateFieldValues(request, templates),
-    [request, templates]
+    () => getMissingPreviewDocumentFieldValues(request, activeDocument, templates),
+    [activeDocument, request, templates]
   );
   const missingFieldStatus = `${missingFieldValues.length} missing ${missingFieldValues.length === 1 ? "value" : "values"}`;
   const missingFieldTooltip = missingFieldValues.length
     ? `Missing: ${missingFieldValues.map((field) => field.label).join(", ")}`
     : "No missing field values.";
   const missingFieldStatusClass = missingFieldValues.length ? "warn" : "";
+  const documentOptions: { id: PreviewDocumentType; label: string }[] = [
+    { id: "qdro", label: "QDRO" },
+    { id: "appearance", label: "Appearance" },
+    { id: "withdrawal", label: "Withdrawal" }
+  ];
+
+  useEffect(() => {
+    setGoogleDocResults({});
+    setNeedsGoogleConnection(false);
+  }, [request.id]);
 
   async function createGoogleDoc() {
+    const documentType = activeDocument;
     setIsCreatingGoogleDoc(true);
-    setGoogleDocStatus("");
-    setGoogleDocUrl("");
+    setGoogleDocResults((currentResults) => ({
+      ...currentResults,
+      [documentType]: undefined
+    }));
     setNeedsGoogleConnection(false);
     try {
       const response = await fetch("/api/documents/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ format: "google-doc", request })
+        body: JSON.stringify({ documentType, format: "google-doc", request })
       });
       const result = (await response.json()) as { message?: string; webViewLink?: string };
       if (!response.ok) {
-        setGoogleDocStatus(result.message || "Google Docs export is not configured yet.");
+        setGoogleDocResults((currentResults) => ({
+          ...currentResults,
+          [documentType]: {
+            status: result.message || "Google Docs export is not configured yet.",
+            url: ""
+          }
+        }));
         setNeedsGoogleConnection(response.status === 401 || result.message?.includes("Google Drive is not connected") || false);
         return;
       }
-      setGoogleDocStatus(result.message || "Google Doc created.");
-      setGoogleDocUrl(result.webViewLink || "");
+      setGoogleDocResults((currentResults) => ({
+        ...currentResults,
+        [documentType]: {
+          status: result.message || "Google Doc created.",
+          url: result.webViewLink || ""
+        }
+      }));
     } catch {
-      setGoogleDocStatus("Google Docs export failed. Check the server configuration and try again.");
+      setGoogleDocResults((currentResults) => ({
+        ...currentResults,
+        [documentType]: {
+          status: "Google Docs export failed. Check the server configuration and try again.",
+          url: ""
+        }
+      }));
     } finally {
       setIsCreatingGoogleDoc(false);
     }
@@ -70,13 +121,25 @@ export function DocumentPreview({
               {missingFieldStatus}
             </span>
           </div>
-          {googleDocStatus && (
+          {activeGoogleDoc?.status && (
             <p className="preview-action-status">
-              {googleDocStatus} {googleDocUrl && <a className="muted-link" href={googleDocUrl} target="_blank">Open Google Doc</a>}
+              {activeGoogleDoc.status} {activeGoogleDoc.url && <a className="muted-link" href={activeGoogleDoc.url} target="_blank">Open Google Doc</a>}
             </p>
           )}
         </div>
         <div className="preview-actions">
+          <div className="document-preview-tabs" aria-label="Preview document">
+            {documentOptions.map((option) => (
+              <button
+                className={activeDocument === option.id ? "active" : ""}
+                key={option.id}
+                type="button"
+                onClick={() => setActiveDocument(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           {needsGoogleConnection && (
             <a className="button secondary" href="/api/google/oauth/start" target="_blank">
               Connect Google Drive

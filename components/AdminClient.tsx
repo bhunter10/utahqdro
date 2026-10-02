@@ -832,7 +832,7 @@ function RequestDetailModal({
           </div>
           <div className="modal-head-actions">
             <button className="button secondary" type="button" onClick={() => setShowPreview(!showPreview)}>
-              {showPreview ? "Hide preview" : "Preview QDRO"}
+              {showPreview ? "Hide preview" : "Preview documents"}
             </button>
             <button className="button secondary" type="button" onClick={onClose} aria-label="Close request detail">
               Close

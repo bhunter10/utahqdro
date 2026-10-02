@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { demoRequest, documentTemplates } from "@/lib/content";
-import { renderDocumentHtml, renderRtf } from "@/lib/document-engine";
+import {
+  renderAppearanceOfCounselHtml,
+  renderDocumentHtml,
+  renderDocumentPackageHtml,
+  renderRtf,
+  renderWithdrawalOfCounselHtml
+} from "@/lib/document-engine";
 import { getAdminDb } from "@/lib/firebase-admin";
 import type { DocumentTemplate } from "@/lib/types";
 
+type ExportDocumentType = "qdro" | "appearance" | "withdrawal" | "package";
+
 export async function POST(req: Request) {
-  const { format = "pdf", request = demoRequest } = (await req.json()) as {
+  const { documentType = "package", format = "pdf", request = demoRequest } = (await req.json()) as {
+    documentType?: ExportDocumentType;
     format?: "html" | "pdf" | "rtf" | "google-doc";
     request?: typeof demoRequest;
   };
@@ -22,7 +31,7 @@ export async function POST(req: Request) {
 
   if (format === "google-doc") {
     try {
-      const doc = await createGoogleDocument(request);
+      const doc = await createGoogleDocument(request, documentType);
       return NextResponse.json({
         message: "Google Doc created.",
         requestId: request.id,
@@ -46,14 +55,14 @@ export async function POST(req: Request) {
   }
 
   const templates = await loadDatabaseTemplates();
-  return new Response(renderDocumentHtml(request, false, { templates }), {
+  return new Response(renderDocumentPackageHtml(request, false, { templates }), {
     headers: {
       "Content-Type": "text/html; charset=utf-8"
     }
   });
 }
 
-async function createGoogleDocument(request: typeof demoRequest) {
+async function createGoogleDocument(request: typeof demoRequest, documentType: ExportDocumentType) {
   const cookieStore = await cookies();
   const refreshToken = cookieStore.get("google_refresh_token")?.value;
   const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
@@ -66,10 +75,10 @@ async function createGoogleDocument(request: typeof demoRequest) {
 
   const accessToken = await getGoogleAccessToken(refreshToken);
   const templates = await loadDatabaseTemplates();
-  const html = renderDocumentHtml(request, false, { includeTemplateLabel: false, templates, wrapDocument: false, wrapBody: false });
+  const html = renderGoogleDocumentHtml(request, documentType, templates);
   const boundary = `utahqdro-${Date.now()}`;
   const metadata = {
-    name: `${request.id || "QDRO"} - ${request.clientName || "Client"} Draft`,
+    name: `${request.id || "QDRO"} - ${request.clientName || "Client"} ${getDocumentName(documentType)}`,
     mimeType: "application/vnd.google-apps.document",
     ...(folderId ? { parents: [folderId] } : {})
   };
@@ -102,6 +111,27 @@ async function createGoogleDocument(request: typeof demoRequest) {
   return response.json() as Promise<{ id: string; name: string; webViewLink: string }>;
 }
 
+function renderGoogleDocumentHtml(request: typeof demoRequest, documentType: ExportDocumentType, templates: DocumentTemplate[]) {
+  const options = { includeTemplateLabel: false, templates, wrapDocument: false, wrapBody: false };
+  if (documentType === "appearance") {
+    return renderAppearanceOfCounselHtml(request, false, options);
+  }
+  if (documentType === "withdrawal") {
+    return renderWithdrawalOfCounselHtml(request, false, options);
+  }
+  if (documentType === "qdro") {
+    return renderDocumentHtml(request, false, options);
+  }
+  return renderDocumentPackageHtml(request, false, options);
+}
+
+function getDocumentName(documentType: ExportDocumentType) {
+  if (documentType === "appearance") return "Appearance of Counsel";
+  if (documentType === "withdrawal") return "Withdrawal of Counsel";
+  if (documentType === "qdro") return "QDRO Draft";
+  return "Document Package";
+}
+
 async function loadDatabaseTemplates() {
   const db = getAdminDb();
   if (!db) return documentTemplates;
@@ -109,7 +139,7 @@ async function loadDatabaseTemplates() {
   const snapshot = await db.collection("documentTemplates").where("active", "==", true).get();
   if (snapshot.empty) return documentTemplates;
 
-  return snapshot.docs.map((doc) => {
+  const savedTemplates = snapshot.docs.map((doc) => {
     const data = doc.data();
     return {
       id: doc.id,
@@ -124,6 +154,14 @@ async function loadDatabaseTemplates() {
       active: Boolean(data.active)
     } satisfies DocumentTemplate;
   });
+
+  return mergeDefaultTemplates(savedTemplates).filter((template) => template.active);
+}
+
+function mergeDefaultTemplates(savedTemplates: DocumentTemplate[]) {
+  const templatesById = new Map(documentTemplates.map((template) => [template.id, template]));
+  savedTemplates.forEach((template) => templatesById.set(template.id, template));
+  return Array.from(templatesById.values());
 }
 
 async function getGoogleAccessToken(refreshToken: string) {

@@ -54,10 +54,19 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     judge_name: value(request.fields, "judge_name"),
     marriage_date: formatLongDate(value(request.fields, "marriage_date")),
     divorce_date: formatLongDate(value(request.fields, "divorce_date")),
+    current_date: new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric"
+    }).format(new Date()),
     order_title: `${amendedText ? `${amendedText} ` : ""}QUALIFIED DOMESTIC RELATIONS ORDER`,
     counsel_for: value(request.fields, "prepared_for") || request.clientName,
+    party1_name: party1Name,
     party1_name_upper: party1Name.toUpperCase(),
+    party1_email: party1.email,
+    party2_name: party2Name,
     party2_name_upper: party2Name.toUpperCase(),
+    party2_email: party2.email,
     entity_account_type: entityAccountType,
     account_type: value(request.fields, "account_type"),
     employer_name: value(request.fields, "employer_name") || "to be confirmed",
@@ -134,11 +143,19 @@ export function selectTemplate(request: QdroRequest): DocumentTemplate {
 }
 
 export function selectTemplateFromList(request: QdroRequest, templates: DocumentTemplate[]): DocumentTemplate {
+  const fallbackTemplate =
+    templates.find((template) => template.id === "general-v1" && template.active) ||
+    templates.find((template) => template.family === "Multi-template / other" && template.active) ||
+    documentTemplates.find((template) => template.id === "general-v1" && template.active) ||
+    documentTemplates.find((template) => template.family === "Multi-template / other" && template.active) ||
+    templates.find((template) => template.active) ||
+    documentTemplates.find((template) => template.active) ||
+    documentTemplates[0];
+
   return (
     templates.find((template) => template.family === request.templateFamily && template.active) ||
     templates.find((template) => template.family === String(request.fields.plan_family) && template.active) ||
-    templates[1] ||
-    documentTemplates[1]
+    fallbackTemplate
   );
 }
 
@@ -170,14 +187,34 @@ const commonShellMergeFields = [
   "entity_account_type",
   "case_number",
   "judge_name",
+  "current_date",
   "participant_name",
   "alternate_payee_name"
 ];
 
 export function getMissingTemplateFieldValues(request: QdroRequest, templates?: DocumentTemplate[]) {
   const template = templates ? selectTemplateFromList(request, templates) : selectTemplate(request);
+  return getMissingFieldValuesForTemplate(request, template, commonShellMergeFields);
+}
+
+export function getMissingPreviewDocumentFieldValues(
+  request: QdroRequest,
+  documentType: "qdro" | "appearance" | "withdrawal",
+  templates?: DocumentTemplate[]
+) {
+  const availableTemplates = templates || documentTemplates;
+  if (documentType === "appearance") {
+    return getMissingFieldValuesForTemplate(request, selectAppearanceTemplate(availableTemplates));
+  }
+  if (documentType === "withdrawal") {
+    return getMissingFieldValuesForTemplate(request, selectWithdrawalTemplate(availableTemplates));
+  }
+  return getMissingTemplateFieldValues(request, templates);
+}
+
+function getMissingFieldValuesForTemplate(request: QdroRequest, template: DocumentTemplate, shellMergeFields: string[] = []) {
   const data = deriveDocumentData(request);
-  const mergeFields = new Set([...commonShellMergeFields, ...extractMergeFields(getEditableTemplateBody(template))]);
+  const mergeFields = new Set([...shellMergeFields, ...extractMergeFields(getEditableTemplateBody(template))]);
 
   return Array.from(mergeFields)
     .filter((field) => !String(data[field as keyof typeof data] ?? "").trim())
@@ -215,6 +252,77 @@ export function renderDocumentHtml(
   return `<article style="max-width: 8.5in; margin: 0 auto; color: #000000; font-family: Times New Roman; font-size: 12pt; line-height: 14pt;">${documentBody}</article>`;
 }
 
+export function renderDocumentPackageHtml(
+  request: QdroRequest,
+  maskSensitive = false,
+  options: RenderDocumentOptions = {}
+) {
+  const documents = [
+    { html: renderAppearanceOfCounselHtml(request, maskSensitive, options), lineHeight: "12pt" },
+    { html: renderDocumentHtml(request, maskSensitive, { ...options, wrapDocument: false }), lineHeight: "14pt" },
+    { html: renderWithdrawalOfCounselHtml(request, maskSensitive, options), lineHeight: "12pt" }
+  ];
+
+  if (options.wrapDocument === false) return documents.map((document) => document.html).join(renderDocumentBreak(false));
+
+  return documents
+    .map((document) => `<article style="max-width: 8.5in; margin: 0 auto; color: #000000; font-family: Times New Roman; font-size: 12pt; line-height: ${document.lineHeight};">${document.html}</article>`)
+    .join(renderDocumentBreak(true));
+}
+
+export function renderAppearanceOfCounselHtml(
+  request: QdroRequest,
+  maskSensitive = false,
+  options: RenderDocumentOptions = {}
+) {
+  const template = selectAppearanceTemplate(options.templates || documentTemplates);
+  const rendered = inlineAppearanceDocumentStyles(renderTemplate(template, request, maskSensitive, options));
+  const templateLabel = options.includeTemplateLabel === false
+    ? ""
+    : `<div style="margin: 0 0 12pt; color: #64748b; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;">${escapeHtml(template.name)} · configurable template v${template.version}</div>`;
+
+  return `${templateLabel}${rendered}`;
+}
+
+function selectAppearanceTemplate(templates: DocumentTemplate[]) {
+  return (
+    templates.find((template) => template.id === "appearance-of-counsel-v1" && template.active) ||
+    templates.find((template) => template.family === "Supplemental: Appearance of Counsel" && template.active) ||
+    documentTemplates.find((template) => template.id === "appearance-of-counsel-v1" && template.active) ||
+    documentTemplates.find((template) => template.family === "Supplemental: Appearance of Counsel" && template.active) ||
+    documentTemplates[0]
+  );
+}
+
+export function renderWithdrawalOfCounselHtml(
+  request: QdroRequest,
+  maskSensitive = false,
+  options: RenderDocumentOptions = {}
+) {
+  const template = selectWithdrawalTemplate(options.templates || documentTemplates);
+  const rendered = inlineWithdrawalDocumentStyles(renderTemplate(template, request, maskSensitive, options));
+  const templateLabel = options.includeTemplateLabel === false
+    ? ""
+    : `<div style="margin: 0 0 12pt; color: #64748b; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;">${escapeHtml(template.name)} · configurable template v${template.version}</div>`;
+
+  return `${templateLabel}${rendered}`;
+}
+
+function selectWithdrawalTemplate(templates: DocumentTemplate[]) {
+  return (
+    templates.find((template) => template.id === "withdrawal-of-counsel-v1" && template.active) ||
+    templates.find((template) => template.family === "Supplemental: Withdrawal of Counsel" && template.active) ||
+    documentTemplates.find((template) => template.id === "withdrawal-of-counsel-v1" && template.active) ||
+    documentTemplates.find((template) => template.family === "Supplemental: Withdrawal of Counsel" && template.active) ||
+    documentTemplates[0]
+  );
+}
+
+function renderDocumentBreak(wrappedArticles: boolean) {
+  const margin = wrappedArticles ? "24pt auto" : "24pt 0";
+  return `<div style="break-after: page; page-break-after: always; height: 0; margin: ${margin};"></div>`;
+}
+
 function inlineDocumentStyles(html: string) {
   const paragraphStyle = "margin: 0 0 12pt; line-height: 14pt; font-family: Times New Roman; font-size: 12pt; color: #000000;";
   const indentStyle = `${paragraphStyle} text-indent: 0.5in;`;
@@ -228,6 +336,126 @@ function inlineDocumentStyles(html: string) {
     .replace(/<p class="subindent">/g, `<p style="${subindentStyle}">`)
     .replace(/<p class="court-heading"(?: style="[^"]*")?>/g, `<p style="${headingStyle}">`)
     .replace(/<p class="court-footer">/g, `<p style="${footerStyle}">`);
+}
+
+function inlineAppearanceDocumentStyles(html: string) {
+  const baseText = "font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;";
+  const appearanceStyles = {
+    section: `box-sizing: border-box; ${baseText}`,
+    paragraph: `margin: 0 0 12pt; ${baseText}`,
+    body: `margin: 0 0 12pt; ${baseText}`,
+    serviceCertificate: `margin: 0 0 12pt; padding-top: 12pt; ${baseText}`,
+    spacer: `margin: 0; ${baseText}`,
+    captionTable: `width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0; ${baseText}`,
+    captionCell: `border: 1px solid #000000; padding: 17pt 16pt; vertical-align: top; ${baseText}`,
+    captionHeading: `border: 1px solid #000000; padding: 6pt 12pt; text-align: center; text-transform: uppercase; vertical-align: middle; ${baseText}`,
+    captionLine: `margin: 0; ${baseText}`,
+    captionBlank: `margin: 0; ${baseText}`,
+    signatureTable: `width: 100%; border-collapse: collapse; table-layout: fixed; margin: 12pt 0; ${baseText}`,
+    signatureDate: `width: 50%; border: none; padding: 12pt 0 12pt 36pt; vertical-align: top; ${baseText}`,
+    signatureCell: `width: 50%; border: none; padding: 12pt 0 0 36pt; vertical-align: top; ${baseText}`,
+    signatureLine: `margin: 0; ${baseText}`
+  };
+
+  return html
+    .replace(/<section class="supplemental-document">/g, `<section style="${appearanceStyles.section}">`)
+    .replace(/<p class="attorney-block">/g, `<p style="${appearanceStyles.paragraph}">`)
+    .replace(/<p class="counsel-line">/g, `<p style="${appearanceStyles.paragraph}">`)
+    .replace(/<p class="caption-spacer">/g, `<p style="${appearanceStyles.spacer}">`)
+    .replace(/<p class="body-text">/g, `<p style="${appearanceStyles.body}">`)
+    .replace(/<p class="service-certificate">/g, `<p style="${appearanceStyles.serviceCertificate}">`)
+    .replace(/<table class="court-caption">/g, `<table cellpadding="0" cellspacing="0" style="${appearanceStyles.captionTable}">`)
+    .replace(/<table class="signature-row">/g, `<table cellpadding="0" cellspacing="0" style="${appearanceStyles.signatureTable}">`)
+    .replace(/<div class="caption-line">/g, `<div style="${appearanceStyles.captionLine}">`)
+    .replace(/<div class="caption-blank">/g, `<div style="${appearanceStyles.captionBlank}">`)
+    .replace(/<td colspan="2" class="court-heading">/g, `<td colspan="2" style="${appearanceStyles.captionHeading}">`)
+    .replace(/<td class="signature-date">/g, `<td style="${appearanceStyles.signatureDate}">`)
+    .replace(/<td class="signature-name">/g, `<td style="${appearanceStyles.signatureCell}">`)
+    .replace(/<div class="signature-line">/g, `<div style="${appearanceStyles.signatureLine}">`)
+    .replace(/<td>/g, `<td style="${appearanceStyles.captionCell}">`);
+}
+
+function inlineWithdrawalDocumentStyles(html: string) {
+  const baseText = "font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;";
+  const withdrawalStyles = {
+    section: `box-sizing: border-box; ${baseText}`,
+    paragraph: `margin: 0 0 12pt; ${baseText}`,
+    body: `margin: 0 0 12pt; ${baseText}`,
+    serviceCertificate: `margin: 0 0 12pt; padding-top: 12pt; ${baseText}`,
+    spacer: `margin: 0; ${baseText}`,
+    captionTable: `width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0; ${baseText}`,
+    captionCell: `border: 1px solid #000000; padding: 17pt 16pt; vertical-align: top; ${baseText}`,
+    captionHeading: `border: 1px solid #000000; padding: 6pt 12pt; text-align: center; text-transform: uppercase; vertical-align: middle; ${baseText}`,
+    captionLine: `margin: 0; ${baseText}`,
+    captionBlank: `margin: 0; ${baseText}`,
+    signatureTable: `width: 100%; border-collapse: collapse; table-layout: fixed; margin: 12pt 0; ${baseText}`,
+    signatureDate: `width: 50%; border: none; padding: 12pt 0 12pt 36pt; vertical-align: top; ${baseText}`,
+    signatureCell: `width: 50%; border: none; padding: 12pt 0 0 36pt; vertical-align: top; ${baseText}`,
+    signatureLine: `margin: 0; ${baseText}`,
+    serviceTable: `width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0 0 12pt; ${baseText}`,
+    serviceCell: `width: 50%; border: none; padding: 0; vertical-align: top; ${baseText}`,
+    serviceLine: `margin: 0; padding: 0; ${baseText}`
+  };
+
+  return html
+    .replace(/<section class="supplemental-document">/g, `<section style="${withdrawalStyles.section}">`)
+    .replace(/<p class="attorney-block">/g, `<p style="${withdrawalStyles.paragraph}">`)
+    .replace(/<p class="counsel-line">/g, `<p style="${withdrawalStyles.paragraph}">`)
+    .replace(/<p class="caption-spacer">/g, `<p style="${withdrawalStyles.spacer}">`)
+    .replace(/<p class="body-text">/g, `<p style="${withdrawalStyles.body}">`)
+    .replace(/<p class="service-certificate">/g, `<p style="${withdrawalStyles.serviceCertificate}">`)
+    .replace(/<table class="court-caption">/g, `<table cellpadding="0" cellspacing="0" style="${withdrawalStyles.captionTable}">`)
+    .replace(/<table class="signature-row">/g, `<table cellpadding="0" cellspacing="0" style="${withdrawalStyles.signatureTable}">`)
+    .replace(/<table class="service-list">/g, `<table cellpadding="0" cellspacing="0" style="${withdrawalStyles.serviceTable}">`)
+    .replace(/<div class="caption-line">/g, `<div style="${withdrawalStyles.captionLine}">`)
+    .replace(/<div class="caption-blank">/g, `<div style="${withdrawalStyles.captionBlank}">`)
+    .replace(/<td colspan="2" class="court-heading">/g, `<td colspan="2" style="${withdrawalStyles.captionHeading}">`)
+    .replace(/<td class="signature-date">/g, `<td style="${withdrawalStyles.signatureDate}">`)
+    .replace(/<td class="signature-name">/g, `<td style="${withdrawalStyles.signatureCell}">`)
+    .replace(/<div class="signature-line">/g, `<div style="${withdrawalStyles.signatureLine}">`)
+    .replace(/<td class="service-party">/g, `<td style="${withdrawalStyles.serviceCell}">`)
+    .replace(/<td class="service-email">/g, `<td style="${withdrawalStyles.serviceCell}">`)
+    .replace(/<div class="service-line">/g, `<div style="${withdrawalStyles.serviceLine}">`)
+    .replace(/<td>/g, `<td style="${withdrawalStyles.captionCell}">`);
+}
+
+function inlineSupplementalDocumentStyles(html: string, options: { lineHeight?: string } = {}) {
+  const lineHeight = options.lineHeight || "16pt";
+  const paragraphStyle = `margin: 0 0 12pt; line-height: ${lineHeight}; font-family: Times New Roman; font-size: 12pt; color: #000000;`;
+  const attorneyStyle = `margin: 0 0 12pt; line-height: ${lineHeight}; font-family: Times New Roman; font-size: 12pt; color: #000000;`;
+  const counselStyle = `margin: 0 0 12pt; line-height: ${lineHeight}; font-family: Times New Roman; font-size: 12pt; color: #000000;`;
+  const bodyStyle = `margin: 12pt 0 12pt; line-height: ${lineHeight}; font-family: Times New Roman; font-size: 12pt; color: #000000;`;
+  const serviceStyle = `margin: 12pt 0 12pt; line-height: ${lineHeight}; font-family: Times New Roman; font-size: 12pt; color: #000000;`;
+  const tableStyle = `width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0 0 22pt; font-family: Times New Roman; font-size: 12pt; line-height: ${lineHeight}; color: #000000;`;
+  const cellStyle = `border: 1px solid #000000; padding: 17pt 16pt; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: ${lineHeight}; color: #000000;`;
+  const headingCellStyle = `border: 1px solid #000000; padding: 6pt 12pt 6pt; text-align: center; text-transform: uppercase; vertical-align: middle; font-family: Times New Roman; font-size: 12pt; line-height: ${lineHeight}; color: #000000;`;
+  const signatureTableStyle = `width: 100%; border-collapse: collapse; table-layout: fixed; margin: 18pt 0 20pt; font-family: Times New Roman; font-size: 12pt; line-height: ${lineHeight}; color: #000000;`;
+  const signatureCellStyle = `width: 50%; border: none; padding: 0 0 0 36pt; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: ${lineHeight}; color: #000000;`;
+  const signatureRowStyle = `display: grid; grid-template-columns: 50% 50%; margin: 18pt 0 20pt; font-family: Times New Roman; font-size: 12pt; line-height: ${lineHeight}; color: #000000;`;
+  const signatureColumnStyle = `padding: 0 0 0 36pt; font-family: Times New Roman; font-size: 12pt; line-height: ${lineHeight}; color: #000000;`;
+  const serviceTableStyle = `width: 100%; border-collapse: collapse; table-layout: fixed; margin: 12pt 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: ${lineHeight}; color: #000000;`;
+  const serviceCellStyle = `width: 50%; border: none; padding: 0 0 8pt 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: ${lineHeight}; color: #000000;`;
+
+  return html
+    .replace(/<section class="supplemental-document">/g, `<section style="box-sizing: border-box; color: #000000; font-family: Times New Roman; font-size: 12pt; line-height: ${lineHeight};">`)
+    .replace(/<p class="attorney-block">/g, `<p style="${attorneyStyle}">`)
+    .replace(/<p class="counsel-line">/g, `<p style="${counselStyle}">`)
+    .replace(/<p class="body-text">/g, `<p style="${bodyStyle}">`)
+    .replace(/<p class="service-certificate">/g, `<p style="${serviceStyle}">`)
+    .replace(/<p>/g, `<p style="${paragraphStyle}">`)
+    .replace(/<div class="signature-row">/g, `<div style="${signatureRowStyle}">`)
+    .replace(/<div>/g, `<div style="${signatureColumnStyle}">`)
+    .replace(/<table class="court-caption">/g, `<table cellpadding="0" cellspacing="0" style="${tableStyle}">`)
+    .replace(/<table class="attorney-signature">/g, `<table cellpadding="0" cellspacing="0" style="${signatureTableStyle}">`)
+    .replace(/<table class="service-list">/g, `<table cellpadding="0" cellspacing="0" style="${serviceTableStyle}">`)
+    .replace(/<td colspan="2" class="court-heading">/g, `<td colspan="2" style="${headingCellStyle}">`)
+    .replace(/<td>/g, `<td style="${cellStyle}">`)
+    .replace(/<table cellpadding="0" cellspacing="0" style="${signatureTableStyle}">([\s\S]*?)<\/table>/g, (signatureTable) =>
+      signatureTable.replace(new RegExp(cellStyle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), signatureCellStyle)
+    )
+    .replace(/<table cellpadding="0" cellspacing="0" style="${serviceTableStyle}">([\s\S]*?)<\/table>/g, (serviceTable) =>
+      serviceTable.replace(new RegExp(cellStyle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), serviceCellStyle)
+    );
 }
 
 function normalizeDocumentBodyHtml(html: string) {
@@ -303,9 +531,9 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
     </colgroup>
     <tbody>
       <tr>
-        <td style="width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: 1px solid #000000; padding: 18pt 14pt 18pt 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
-          <p style="margin: 0 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">In the Matter of the Marriage of</p>
-          <p style="margin: 0; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">${merge("party1_name_upper")}, and<br />${merge("party2_name_upper")}.</p>
+        <td style="width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: 1px solid #000000; padding: 18pt 12pt 18pt 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
+          <p style="margin: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">In the Matter of the Marriage of</p>
+          <p style="margin: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("party1_name_upper")}, and${merge("party2_name_upper")}.</p>
         </td>
         <td style="width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: none; padding: 18pt 0 18pt 14pt; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
           <p style="margin: 0 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">${merge("order_title")}</p>
@@ -393,13 +621,17 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
 
 export function renderRtf(request: QdroRequest, maskSensitive = false) {
   const template = selectTemplate(request);
-  const rendered = stripHtml(renderTemplate(template, request, maskSensitive));
+  const rendered = stripHtml(renderDocumentPackageHtml(request, maskSensitive, {
+    includeTemplateLabel: false,
+    wrapDocument: false,
+    wrapBody: false
+  }));
   const safe = rendered
     .replace(/\\/g, "\\\\")
     .replace(/\{/g, "\\{")
     .replace(/\}/g, "\\}")
     .replace(/\n/g, "\\par\n");
-  return `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Times New Roman;}}\\f0\\fs24\\b ${template.name}\\b0\\par ${safe}}`;
+  return `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Times New Roman;}}\\f0\\fs24\\b Appearance of Counsel, ${template.name}, and Withdrawal of Counsel\\b0\\par ${safe}}`;
 }
 
 function escapeHtml(valueToEscape: string) {
