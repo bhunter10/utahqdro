@@ -174,7 +174,7 @@ export function IntakeWizard() {
       status: submitted ? "Payment Pending" : "Draft",
       paymentState: submitted ? "pending" : "unpaid",
       signatureState: "not_started",
-      templateFamily: String(fields.plan_family || "Multi-template / other"),
+      templateFamily: String(fields.plan_family || "Other"),
       fields
     };
   }, [clientUser?.email, data, submitted]);

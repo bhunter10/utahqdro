@@ -170,7 +170,7 @@ function normalizeRequest(id: string, data: FirebaseFirestore.DocumentData): Qdr
       data.signatureState === "sent" || data.signatureState === "partially_signed" || data.signatureState === "completed"
         ? data.signatureState
         : "not_started",
-    templateFamily: String(data.templateFamily || data.fields?.plan_family || "Multi-template / other"),
+    templateFamily: String(data.templateFamily || data.fields?.plan_family || "Other"),
     fields: normalizeFields(data.fields),
     files: normalizeFiles(data.files),
     notes: Array.isArray(data.notes) ? data.notes : [],

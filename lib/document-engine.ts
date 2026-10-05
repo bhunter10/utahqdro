@@ -44,6 +44,12 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
         : "50%";
   const amendedText = value(request.fields, "amended_text");
   const entityAccountType = formatPlanReference(request);
+  const courtLocation = value(request.fields, "court_location");
+  const addendumCourtName = [
+    court?.district ? `${court.district} Judicial District` : value(request.fields, "district"),
+    courtLocation,
+    court?.county || value(request.fields, "court_county")
+  ].filter(Boolean).join(", ");
 
   return {
     case_number: value(request.fields, "case_number"),
@@ -57,15 +63,17 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
       day: "numeric",
       year: "numeric"
     }).format(new Date()),
-    order_title: `${amendedText ? `${amendedText} ` : ""}QUALIFIED DOMESTIC RELATIONS ORDER`,
+    order_title: getOrderTitle(request, amendedText),
     order_reference: `${amendedText ? `${amendedText} ` : ""}Order`,
     counsel_for: request.clientName,
+    requesting_full_name: value(request.fields, "requester_name") || request.clientName,
     party1_name: party1Name,
     party1_name_upper: party1Name.toUpperCase(),
     party1_email: party1.email,
     party2_name: party2Name,
     party2_name_upper: party2Name.toUpperCase(),
     party2_email: party2.email,
+    addendum_court_name: addendumCourtName,
     entity_account_type: entityAccountType,
     legal_plan_heading: getLegalPlanHeading(request),
     account_type: value(request.fields, "account_type"),
@@ -78,13 +86,17 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     employer_email: value(request.fields, "employer_email"),
     formal_plan_name: value(request.fields, "formal_plan_name"),
     plan_account_number: value(request.fields, "plan_account_number"),
+    plan_number_phrase: getPlanNumberPhrase(request, "with"),
+    plan_number_under_phrase: getPlanNumberPhrase(request, "under"),
     participant_name: participant.name,
+    participant_signature_role: getParticipantSignatureRole(request),
     participant_full_address: participant.address || "address to be confirmed",
     participant_ssn: maskSensitive ? maskSsn(participant.ssn) : participant.ssn,
     participant_dob: participant.dob,
     participant_phone: participant.phone,
     participant_email: participant.email,
     alternate_payee_name: alternate.name,
+    alternate_signature_role: getAlternateSignatureRole(request),
     alternate_full_address: alternate.address || "address to be confirmed",
     alternate_payee_ssn: maskSensitive ? maskSsn(alternate.ssn) : alternate.ssn,
     alternate_payee_dob: alternate.dob,
@@ -93,8 +105,15 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     award_text: awardText,
     percent_amount: divisionType === "Fixed amount" && fixedAward ? formatCurrencyValue(fixedAward) : `${percentAward || "50"}%`,
     valuation_date: formatLongDate(value(request.fields, "valuation_date")) || "the Date of Transfer",
+    multi_valuation_date: formatLongDate(value(request.fields, "valuation_date")) || "the \"Date of Transfer\" meaning the date the Alternate Payee's account under the Plan is funded following qualification of this Order",
     adjust_market: getMarketAdjustmentText(value(request.fields, "market_adjustment")),
     adjust_market_shall: getMarketAdjustmentShallText(value(request.fields, "market_adjustment")),
+    tsp_civilian_checked: getTspAccountCheck(request, "Civilian Account"),
+    tsp_uniformed_checked: getTspAccountCheck(request, "Uniformed Services Account"),
+    tsp_beneficiary_checked: getTspAccountCheck(request, "Beneficiary Participant Account"),
+    tsp_loan_reduction_clause: divisionType === "Percentage"
+      ? "If there is a loan on the account, the participant's vested balance will/will not be reduced by the value of outstanding loans before the payee's portion of the benefit is determined."
+      : "",
     special_terms: value(request.fields, "special_terms") || "None stated."
   };
 }
@@ -111,6 +130,7 @@ function formatPlanReference(request: QdroRequest) {
   const rawPlanFamily = value(fields, "plan_family") || request.templateFamily;
   const rawAccountType = value(fields, "account_type");
   if (rawPlanFamily === "URS" && rawAccountType === "Pension") return "URS Pension";
+  if (rawPlanFamily === "TSP" && rawAccountType === "TSP") return "Thrift Savings Plan";
 
   const planFamily = formatPlanFamilyName(rawPlanFamily);
   const accountType = formatPlanReferenceAccountType(rawAccountType);
@@ -120,12 +140,40 @@ function formatPlanReference(request: QdroRequest) {
   return reference || value(fields, "formal_plan_name");
 }
 
+function getOrderTitle(request: QdroRequest, amendedText: string) {
+  const title = value(request.fields, "plan_family") === "TSP" && value(request.fields, "account_type") === "TSP"
+    ? "RETIREMENT BENEFITS COURT ORDER"
+    : "QUALIFIED DOMESTIC RELATIONS ORDER";
+
+  return `${amendedText ? `${amendedText} ` : ""}${title}`;
+}
+
 function getLegalPlanHeading(request: QdroRequest) {
   if (value(request.fields, "plan_family") === "URS" && value(request.fields, "account_type") === "Pension") {
     return "URS DEFINED BENEFIT PLAN";
   }
 
   return "";
+}
+
+function getParticipantSignatureRole(request: QdroRequest) {
+  if (value(request.fields, "plan_family") === "Empower") return "Member";
+  if (value(request.fields, "plan_family") === "URS" && value(request.fields, "account_type") === "Pension") return "Member";
+  return "Participant";
+}
+
+function getAlternateSignatureRole(request: QdroRequest) {
+  if (value(request.fields, "plan_family") === "TSP" && value(request.fields, "account_type") === "TSP") return "Payee";
+  return "Alternate Payee";
+}
+
+function getTspAccountCheck(request: QdroRequest, accountType: string) {
+  return value(request.fields, "tsp_account_type") === accountType ? "X" : "__";
+}
+
+function getPlanNumberPhrase(request: QdroRequest, preposition: "with" | "under") {
+  const planNumber = value(request.fields, "plan_account_number").replace(/^#+/, "").trim();
+  return planNumber ? ` ${preposition} Plan #${planNumber}` : "";
 }
 
 function formatPlanFamilyName(planFamily: string) {
@@ -193,14 +241,14 @@ export function selectTemplate(request: QdroRequest): DocumentTemplate {
 }
 
 export function selectTemplateFromList(request: QdroRequest, templates: DocumentTemplate[]): DocumentTemplate {
-  const activeTemplates = templates.filter((template) => template.active);
+  const activeTemplates = templates.filter((template) => template.active && !isSupplementalTemplate(template));
   const fallbackTemplate =
     activeTemplates.find((template) => template.id === "general-v1") ||
     activeTemplates.find((template) => template.family === "Multi-template / other") ||
-    documentTemplates.find((template) => template.id === "general-v1" && template.active) ||
-    documentTemplates.find((template) => template.family === "Multi-template / other" && template.active) ||
+    documentTemplates.find((template) => template.id === "general-v1" && template.active && !isSupplementalTemplate(template)) ||
+    documentTemplates.find((template) => template.family === "Multi-template / other" && template.active && !isSupplementalTemplate(template)) ||
     activeTemplates[0] ||
-    documentTemplates.find((template) => template.active) ||
+    documentTemplates.find((template) => template.active && !isSupplementalTemplate(template)) ||
     documentTemplates[0];
   const currentPlanFamily = String(request.fields.plan_family || "").trim();
   const requestedFamilies = [currentPlanFamily || request.templateFamily]
@@ -218,6 +266,10 @@ export function selectTemplateFromList(request: QdroRequest, templates: Document
     familyMatches[0] ||
     fallbackTemplate
   );
+}
+
+function isSupplementalTemplate(template: DocumentTemplate) {
+  return template.family.startsWith("Supplemental:");
 }
 
 function templateMatchesFamily(template: DocumentTemplate, family: string) {
@@ -259,13 +311,14 @@ const commonShellMergeFields = [
   "party1_name_upper",
   "party2_name_upper",
   "order_title",
-  "legal_plan_heading",
   "entity_account_type",
   "case_number",
   "judge_name",
   "current_date",
   "participant_name",
-  "alternate_payee_name"
+  "participant_signature_role",
+  "alternate_payee_name",
+  "alternate_signature_role"
 ];
 
 export function getMissingTemplateFieldValues(request: QdroRequest, templates?: DocumentTemplate[]) {
@@ -275,7 +328,7 @@ export function getMissingTemplateFieldValues(request: QdroRequest, templates?: 
 
 export function getMissingPreviewDocumentFieldValues(
   request: QdroRequest,
-  documentType: "qdro" | "appearance" | "withdrawal",
+  documentType: "qdro" | "appearance" | "withdrawal" | "addendum",
   templates?: DocumentTemplate[]
 ) {
   const availableTemplates = templates || documentTemplates;
@@ -285,6 +338,9 @@ export function getMissingPreviewDocumentFieldValues(
   if (documentType === "withdrawal") {
     return getMissingFieldValuesForTemplate(request, selectWithdrawalTemplate(availableTemplates));
   }
+  if (documentType === "addendum") {
+    return getMissingFieldValuesForTemplate(request, selectAddendumTemplate(request, availableTemplates));
+  }
   return getMissingTemplateFieldValues(request, templates);
 }
 
@@ -293,11 +349,20 @@ function getMissingFieldValuesForTemplate(request: QdroRequest, template: Docume
   const mergeFields = new Set([...shellMergeFields, ...extractMergeFields(getEditableTemplateBody(template))]);
 
   return Array.from(mergeFields)
+    .filter((field) => !isOptionalMissingField(request, field))
     .filter((field) => !String(data[field as keyof typeof data] ?? "").trim())
     .map((field) => ({
       key: field,
       label: humanizeMergeField(field)
     }));
+}
+
+function isOptionalMissingField(request: QdroRequest, field: string) {
+  if (field === "tsp_loan_reduction_clause") {
+    return value(request.fields, "division_type") !== "Percentage";
+  }
+
+  return false;
 }
 
 export function getEditableTemplateBody(template: DocumentTemplate) {
@@ -390,6 +455,40 @@ function selectWithdrawalTemplate(templates: DocumentTemplate[]) {
     templates.find((template) => template.family === "Supplemental: Withdrawal of Counsel" && template.active) ||
     documentTemplates.find((template) => template.id === "withdrawal-of-counsel-v1" && template.active) ||
     documentTemplates.find((template) => template.family === "Supplemental: Withdrawal of Counsel" && template.active) ||
+    documentTemplates[0]
+  );
+}
+
+export function renderAddendumHtml(
+  request: QdroRequest,
+  maskSensitive = false,
+  options: RenderDocumentOptions = {}
+) {
+  const template = selectAddendumTemplate(request, options.templates || documentTemplates);
+  const rendered = inlineAddendumDocumentStyles(renderTemplate(template, request, maskSensitive, options));
+  const templateLabel = options.includeTemplateLabel === false
+    ? ""
+    : `<div style="margin: 0 0 12pt; color: #64748b; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;">${escapeHtml(template.name)} · configurable template v${template.version}</div>`;
+
+  return `${templateLabel}${rendered}`;
+}
+
+function selectAddendumTemplate(request: QdroRequest, templates: DocumentTemplate[]) {
+  if (value(request.fields, "plan_family") === "TSP" && value(request.fields, "account_type") === "TSP") {
+    return (
+      templates.find((template) => template.id === "tsp-addendum-v1" && template.active) ||
+      templates.find((template) => template.family === "Supplemental: TSP Addendum" && template.active) ||
+      documentTemplates.find((template) => template.id === "tsp-addendum-v1" && template.active) ||
+      documentTemplates.find((template) => template.family === "Supplemental: TSP Addendum" && template.active) ||
+      documentTemplates[0]
+    );
+  }
+
+  return (
+    templates.find((template) => template.id === "urs-addendum-v1" && template.active) ||
+    templates.find((template) => template.family === "Supplemental: URS Addendum" && template.active) ||
+    documentTemplates.find((template) => template.id === "urs-addendum-v1" && template.active) ||
+    documentTemplates.find((template) => template.family === "Supplemental: URS Addendum" && template.active) ||
     documentTemplates[0]
   );
 }
@@ -493,6 +592,68 @@ function inlineWithdrawalDocumentStyles(html: string) {
     .replace(/<td class="service-email">/g, `<td style="${withdrawalStyles.serviceCell}">`)
     .replace(/<div class="service-line">/g, `<div style="${withdrawalStyles.serviceLine}">`)
     .replace(/<td>/g, `<td style="${withdrawalStyles.captionCell}">`);
+}
+
+function inlineAddendumDocumentStyles(html: string) {
+  const baseText = "font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;";
+  const addendumStyles = {
+    section: `box-sizing: border-box; ${baseText}`,
+    title: "margin: 0; font-family: Arial, sans-serif; font-size: 16pt; line-height: 18pt; color: #2E3C66;",
+    subtitle: "margin: 0 0 18pt; font-family: Arial, sans-serif; font-size: 10pt; line-height: 12pt; color: #000000;",
+    bannerTable: "width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0 0 12pt; font-family: Arial, sans-serif; font-size: 10pt; line-height: 12pt; color: #ffffff !important; background: #1A3765 !important; background-color: #1A3765 !important;",
+    bannerCell: "border: 1px solid #1A3765; padding: 6pt 10pt; font-family: Arial, sans-serif; font-size: 10pt; line-height: 12pt; color: #ffffff !important; background: #1A3765 !important; background-color: #1A3765 !important;",
+    bannerText: "font-family: Arial, sans-serif; font-size: 10pt; line-height: 12pt; color: #ffffff !important; background-color: transparent;",
+    table: `width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0 0 14pt; ${baseText}`,
+    labelCell: `width: 50%; border: 1px solid #000000; padding: 3pt 5pt; vertical-align: top; ${baseText}`,
+    valueCell: `width: 50%; border: 1px solid #000000; padding: 3pt 5pt; vertical-align: top; ${baseText}`,
+    sectionCell: `border: 1px solid #000000; padding: 3pt 5pt; text-align: center; vertical-align: top; ${baseText}`,
+    line: `margin: 0; padding: 0; ${baseText}`,
+    provided: `margin: 0 0 8pt; padding-top: 4pt; ${baseText}`,
+    signature: `margin: 0 0 8pt; ${baseText}`,
+    field: `margin: 0; ${baseText}`
+  };
+  const normalizedHtml = html.replace(
+    /<p class="urs-addendum-banner">([\s\S]*?)<\/p>/g,
+    '<table class="urs-addendum-banner"><tbody><tr><td class="urs-addendum-banner-cell"><span class="urs-addendum-banner-text">$1</span></td></tr></tbody></table>'
+  );
+  const tspStyles = {
+    section: `box-sizing: border-box; ${baseText}`,
+    heading: "margin: 0 0 14pt; font-family: Times New Roman; font-size: 15pt; line-height: 17pt; font-weight: bold; text-align: center; color: #000000;",
+    notice: "margin: 0 0 14pt; padding-top: 4pt; border-top: 1px solid #000000; font-family: Times New Roman; font-size: 8pt; line-height: 10pt; color: #000000;",
+    sectionTitle: `margin: 0 0 6pt; font-weight: bold; ${baseText}`,
+    infoTable: `width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0 0 14pt; ${baseText}`,
+    labelCell: `width: 28%; border: none; padding: 0 8pt 3pt 0; vertical-align: top; ${baseText}`,
+    valueCell: `width: 72%; border: none; padding: 0 0 3pt; vertical-align: top; ${baseText}`,
+    signatureTable: `width: 100%; border-collapse: collapse; table-layout: fixed; margin: 12pt 0 18pt; ${baseText}`,
+    signatureCell: `border: none; padding: 0 12pt 2pt 0; vertical-align: top; ${baseText}`,
+    small: "margin: 0 0 18pt; font-family: Times New Roman; font-size: 8pt; line-height: 10pt; color: #000000;"
+  };
+
+  return normalizedHtml
+    .replace(/<section class="urs-addendum">/g, `<section style="${addendumStyles.section}">`)
+    .replace(/<section class="tsp-addendum">/g, `<section style="${tspStyles.section}">`)
+    .replace(/<p class="urs-addendum-title">/g, `<p style="${addendumStyles.title}">`)
+    .replace(/<p class="urs-addendum-subtitle">/g, `<p style="${addendumStyles.subtitle}">`)
+    .replace(/<table class="urs-addendum-banner">/g, `<table cellpadding="0" cellspacing="0" bgcolor="#1A3765" style="${addendumStyles.bannerTable}">`)
+    .replace(/<td class="urs-addendum-banner-cell">/g, `<td bgcolor="#1A3765" style="${addendumStyles.bannerCell}">`)
+    .replace(/<span class="urs-addendum-banner-text">/g, `<span style="${addendumStyles.bannerText}">`)
+    .replace(/<table class="urs-addendum-table">/g, `<table cellpadding="0" cellspacing="0" style="${addendumStyles.table}">`)
+    .replace(/<td class="addendum-label">/g, `<td style="${addendumStyles.labelCell}">`)
+    .replace(/<td class="addendum-value">/g, `<td style="${addendumStyles.valueCell}">`)
+    .replace(/<td colspan="2" class="urs-addendum-section">/g, `<td colspan="2" style="${addendumStyles.sectionCell}">`)
+    .replace(/<div class="addendum-line">/g, `<div style="${addendumStyles.line}">`)
+    .replace(/<p class="urs-addendum-provided">/g, `<p style="${addendumStyles.provided}">`)
+    .replace(/<p class="urs-addendum-signature">/g, `<p style="${addendumStyles.signature}">`)
+    .replace(/<p class="urs-addendum-field">/g, `<p style="${addendumStyles.field}">`)
+    .replace(/<p class="tsp-addendum-heading">/g, `<p style="${tspStyles.heading}">`)
+    .replace(/<p class="tsp-addendum-notice">/g, `<p style="${tspStyles.notice}">`)
+    .replace(/<p class="tsp-addendum-section-title">/g, `<p style="${tspStyles.sectionTitle}">`)
+    .replace(/<table class="tsp-addendum-info">/g, `<table cellpadding="0" cellspacing="0" style="${tspStyles.infoTable}">`)
+    .replace(/<td class="tsp-addendum-label">/g, `<td style="${tspStyles.labelCell}">`)
+    .replace(/<td class="tsp-addendum-value">/g, `<td style="${tspStyles.valueCell}">`)
+    .replace(/<table class="tsp-addendum-signature">/g, `<table cellpadding="0" cellspacing="0" style="${tspStyles.signatureTable}">`)
+    .replace(/<p class="tsp-addendum-small">/g, `<p style="${tspStyles.small}">`)
+    .replace(/<td>/g, `<td style="${tspStyles.signatureCell}">`);
 }
 
 function inlineSupplementalDocumentStyles(html: string, options: { lineHeight?: string } = {}) {
@@ -651,7 +812,7 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
                 <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; color: #000000;">________________________________</td>
               </tr>
               <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; color: #000000;">${merge("participant_name")}, Participant,</td>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; color: #000000;">${merge("participant_name")}, ${merge("participant_signature_role")},</td>
               </tr>
               <tr>
                 <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">(Signed Electronically)</td>
@@ -683,7 +844,7 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
                 <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">________________________________</td>
               </tr>
               <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("alternate_payee_name")}, Alternate Payee,</td>
+                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("alternate_payee_name")}, ${merge("alternate_signature_role")},</td>
               </tr>
               <tr>
                 <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">(Signed Electronically)</td>

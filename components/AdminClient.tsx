@@ -597,15 +597,10 @@ export function AdminClient() {
                 </div>
                 <div className="template-library-meta">
                   <span className="status">{selectedTemplate.active ? "active" : "inactive"}</span>
-                  <span className="status info">{selectedTemplate.format || "plain"}</span>
                   <small>
-                    Family: {selectedTemplate.family === "Supplemental: Appearance of Counsel" ? "Appearance of Counsel" : selectedTemplate.family} · Version {selectedTemplate.version}
+                    {getTemplateMetaLabel(selectedTemplate)}
                   </small>
                 </div>
-                {selectedTemplate.description &&
-                  selectedTemplate.description !== "Defined contribution order for Fidelity-administered plans." && (
-                    <p>{selectedTemplate.description}</p>
-                  )}
                 <TemplateBodyEditor key={selectedTemplate.id} onSave={saveTemplateChanges} template={selectedTemplate} />
               </div>
             ) : (
@@ -845,7 +840,7 @@ function RequestDetailModal({
               {requester.email || request.clientEmail} · {getEntityType(request)} · Total {formatCurrency(getRequestTotal(request))}
             </p>
             <p>
-              Template: {selectedPreviewTemplate.name} · Request ID: {request.id}
+              Template: {getTemplatePickerLabel(selectedPreviewTemplate.name)}
             </p>
           </div>
           <div className="modal-head-actions">
@@ -1361,6 +1356,18 @@ function getAccountType(request: QdroRequest) {
 
 function getTemplatePickerLabel(templateName: string) {
   return templateName.replace(/\s+QDRO$/i, "");
+}
+
+function getTemplateMetaLabel(template: DocumentTemplate) {
+  if (template.id === "multi-template-v1") {
+    return "Plans: TIAA, Betterment, Merrill Lynch, Kroger, LPL Financial, PCS, Mass Mutual, Milliman, Mission Square, Northwestern Mutual, Wells Fargo, Athene";
+  }
+  if (template.id === "multi-adp-401k-v1") {
+    return "Plans: ADP, Charles Schwab, John Hancock, Transamerica, Vanguard · Account: 401k";
+  }
+
+  const plan = template.family === "Supplemental: Appearance of Counsel" ? "Appearance of Counsel" : template.family;
+  return `Plan: ${plan}`;
 }
 
 function mergeRequests(primary: QdroRequest[], fallback: QdroRequest[]) {

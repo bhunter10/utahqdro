@@ -30,6 +30,24 @@ export const ursPensionMergeFields = [
   "urs_percent_amount"
 ];
 
+export const ursAddendumMergeFields = [
+  "party1_name",
+  "party2_name",
+  "addendum_court_name",
+  "case_number",
+  "participant_name",
+  "participant_ssn",
+  "participant_dob",
+  "participant_phone",
+  "participant_email",
+  "alternate_payee_name",
+  "alternate_payee_ssn",
+  "alternate_payee_dob",
+  "alternate_payee_phone",
+  "alternate_payee_email",
+  "requesting_full_name"
+];
+
 export const ursDefinedContributionHtmlTemplate = `
   <p class="indent">This {{order_reference}} is intended to meet the requirements of a "Domestic Relations Order" (DRO) relating to the defined contribution ("DC") savings plans, 401(k), 457 and Individual Retirement Accounts ("Savings Plan") administered by Utah Retirement Systems ("URS"). The DRO is made pursuant to Utah Code 49-11-612, and rules promulgated thereunder. {{party1_name}} is not represented by counsel for purposes of this DRO. {{party2_name}} is not currently represented by counsel for purposes of this DRO.</p>
 
@@ -206,4 +224,89 @@ export const ursPensionHtmlTemplate = `
   <p class="indent">K. A certified copy of this DRO shall be furnished to URS.</p>
 
   <p class="indent">L. The Court retains jurisdiction to amend this DRO so that it will constitute a DRO under the defined benefit plan even though all other matters incidental to this action or proceeding have been fully and finally adjudicated. If URS determines at any time that changes in the law, the administration of the plan, or any other circumstances make it impossible to calculate the portion of a distribution awarded to an Alternate Payee by this DRO and so notifies the parties, either or both parties shall immediately petition the Court for an amended DRO.</p>
+`;
+
+export const ursAddendumHtmlTemplate = `
+  <section class="urs-addendum">
+    <p class="urs-addendum-title"><strong>Approved Domestic Relations Order</strong></p>
+    <p class="urs-addendum-subtitle"><em>Defined Benefit / Defined Contribution Savings Plans</em></p>
+
+    <table class="urs-addendum-banner">
+      <tbody>
+        <tr>
+          <td class="urs-addendum-banner-cell"><span class="urs-addendum-banner-text"><strong>PRIVATE SEPARATE ADDENDUM</strong> &raquo; This addendum must accompany all proposed domestic relations orders submitted to URS for pre-approval or approval.</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table class="urs-addendum-table">
+      <tbody>
+        <tr>
+          <td class="addendum-label">Case Name:</td>
+          <td class="addendum-value">
+            <div class="addendum-line">In the Matter of the Marriage of</div>
+            <div class="addendum-line">{{party1_name}}, and {{party2_name}}</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="addendum-label">County/City and Court:</td>
+          <td class="addendum-value">{{addendum_court_name}}</td>
+        </tr>
+        <tr>
+          <td class="addendum-label">Case No.:</td>
+          <td class="addendum-value">{{case_number}}</td>
+        </tr>
+        <tr>
+          <td colspan="2" class="urs-addendum-section">MEMBER INFORMATION</td>
+        </tr>
+        <tr>
+          <td class="addendum-label">Member Name:</td>
+          <td class="addendum-value">{{participant_name}}</td>
+        </tr>
+        <tr>
+          <td class="addendum-label">Member Social Security Number:</td>
+          <td class="addendum-value">{{participant_ssn}}</td>
+        </tr>
+        <tr>
+          <td class="addendum-label">Member Date of Birth:</td>
+          <td class="addendum-value">{{participant_dob}}</td>
+        </tr>
+        <tr>
+          <td class="addendum-label">Member Phone Number:</td>
+          <td class="addendum-value">{{participant_phone}}</td>
+        </tr>
+        <tr>
+          <td class="addendum-label">Member Email:</td>
+          <td class="addendum-value">{{participant_email}}</td>
+        </tr>
+        <tr>
+          <td colspan="2" class="urs-addendum-section">ALTERNATE PAYEE INFORMATION</td>
+        </tr>
+        <tr>
+          <td class="addendum-label">Alternate Payee Name:</td>
+          <td class="addendum-value">{{alternate_payee_name}}</td>
+        </tr>
+        <tr>
+          <td class="addendum-label">Alternate Payee Social Security Number:</td>
+          <td class="addendum-value">{{alternate_payee_ssn}}</td>
+        </tr>
+        <tr>
+          <td class="addendum-label">Alternate Payee Date of Birth:</td>
+          <td class="addendum-value">{{alternate_payee_dob}}</td>
+        </tr>
+        <tr>
+          <td class="addendum-label">Alternate Payee Phone Number:</td>
+          <td class="addendum-value">{{alternate_payee_phone}}</td>
+        </tr>
+        <tr>
+          <td class="addendum-label">Alternate Payee Email:</td>
+          <td class="addendum-value">{{alternate_payee_email}}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="urs-addendum-provided">This information provided by:</p>
+    <p class="urs-addendum-signature"><strong>Signature:</strong> ___________________________________________________</p>
+    <p class="urs-addendum-field"><strong>Print Name:</strong> {{requesting_full_name}}</p>
+  </section>
 `;

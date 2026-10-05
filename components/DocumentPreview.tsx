@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   getMissingPreviewDocumentFieldValues,
+  renderAddendumHtml,
   renderAppearanceOfCounselHtml,
   renderDocumentHtml,
   renderWithdrawalOfCounselHtml
 } from "@/lib/document-engine";
 import type { DocumentTemplate, QdroRequest } from "@/lib/types";
 
-type PreviewDocumentType = "qdro" | "appearance" | "withdrawal";
+type PreviewDocumentType = "qdro" | "appearance" | "withdrawal" | "addendum";
 type GoogleDocResult = {
   status: string;
   url: string;
@@ -26,10 +27,14 @@ export function DocumentPreview({
   const [needsGoogleConnection, setNeedsGoogleConnection] = useState(false);
   const [isCreatingGoogleDoc, setIsCreatingGoogleDoc] = useState(false);
   const [activeDocument, setActiveDocument] = useState<PreviewDocumentType>("qdro");
+  const hasAddendum = hasAddendumDocument(request);
   const activeGoogleDoc = googleDocResults[activeDocument];
   const html = useMemo(
     () => {
       const previewOptions = { highlightMergeFields: true, includeTemplateLabel: false, templates };
+      if (activeDocument === "addendum") {
+        return renderAddendumHtml(request, false, previewOptions);
+      }
       if (activeDocument === "appearance") {
         return renderAppearanceOfCounselHtml(request, false, previewOptions);
       }
@@ -51,9 +56,16 @@ export function DocumentPreview({
   const missingFieldStatusClass = missingFieldValues.length ? "warn" : "";
   const documentOptions: { id: PreviewDocumentType; label: string }[] = [
     { id: "qdro", label: "QDRO" },
+    ...(hasAddendum ? [{ id: "addendum" as const, label: "Addendum" }] : []),
     { id: "appearance", label: "Appearance" },
     { id: "withdrawal", label: "Withdrawal" }
   ];
+
+  useEffect(() => {
+    if (!hasAddendum && activeDocument === "addendum") {
+      setActiveDocument("qdro");
+    }
+  }, [activeDocument, hasAddendum]);
 
   useEffect(() => {
     setGoogleDocResults({});
@@ -153,4 +165,10 @@ export function DocumentPreview({
       <div className="preview-document" dangerouslySetInnerHTML={{ __html: html }} />
     </section>
   );
+}
+
+function hasAddendumDocument(request: QdroRequest) {
+  const planFamily = String(request.fields.plan_family || request.templateFamily).trim();
+  const accountType = String(request.fields.account_type || "").trim();
+  return planFamily === "URS" || (planFamily === "TSP" && accountType === "TSP");
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { demoRequest, documentTemplates } from "@/lib/content";
 import {
+  renderAddendumHtml,
   renderAppearanceOfCounselHtml,
   renderDocumentHtml,
   renderDocumentPackageHtml,
@@ -11,7 +12,7 @@ import {
 import { getAdminDb } from "@/lib/firebase-admin";
 import type { DocumentTemplate } from "@/lib/types";
 
-type ExportDocumentType = "qdro" | "appearance" | "withdrawal" | "package";
+type ExportDocumentType = "qdro" | "appearance" | "withdrawal" | "addendum" | "package";
 
 export async function POST(req: Request) {
   const { documentType = "package", format = "pdf", request = demoRequest } = (await req.json()) as {
@@ -78,7 +79,7 @@ async function createGoogleDocument(request: typeof demoRequest, documentType: E
   const html = renderGoogleDocumentHtml(request, documentType, templates);
   const boundary = `utahqdro-${Date.now()}`;
   const metadata = {
-    name: `${request.id || "QDRO"} - ${request.clientName || "Client"} ${getDocumentName(documentType)}`,
+    name: getGoogleDocumentTitle(request, documentType),
     mimeType: "application/vnd.google-apps.document",
     ...(folderId ? { parents: [folderId] } : {})
   };
@@ -119,6 +120,9 @@ function renderGoogleDocumentHtml(request: typeof demoRequest, documentType: Exp
   if (documentType === "withdrawal") {
     return renderWithdrawalOfCounselHtml(request, false, options);
   }
+  if (documentType === "addendum") {
+    return renderAddendumHtml(request, false, options);
+  }
   if (documentType === "qdro") {
     return renderDocumentHtml(request, false, options);
   }
@@ -128,8 +132,49 @@ function renderGoogleDocumentHtml(request: typeof demoRequest, documentType: Exp
 function getDocumentName(documentType: ExportDocumentType) {
   if (documentType === "appearance") return "Appearance of Counsel";
   if (documentType === "withdrawal") return "Withdrawal of Counsel";
+  if (documentType === "addendum") return "Addendum";
   if (documentType === "qdro") return "QDRO Draft";
   return "Document Package";
+}
+
+function getGoogleDocumentTitle(request: typeof demoRequest, documentType: ExportDocumentType) {
+  const planFamily = formatTitleSegment(String(request.fields.plan_family || request.templateFamily || "Plan"));
+  const documentName = formatTitleSegment(getExportTitleDocumentSegment(documentType));
+  const accountType = formatTitleSegment(getExportTitleAccountType(String(request.fields.account_type || "")));
+  const lastName = formatTitleSegment(getClientLastName(String(request.clientName || request.fields.party1_name || "Client")));
+
+  return ["QDRO", planFamily, documentName, accountType, lastName].filter(Boolean).join("_");
+}
+
+function getExportTitleDocumentSegment(documentType: ExportDocumentType) {
+  if (documentType === "addendum") return "Addendum";
+  if (documentType === "appearance") return "Appearance";
+  if (documentType === "withdrawal") return "Withdrawal";
+  if (documentType === "package") return "Package";
+  return "";
+}
+
+function getExportTitleAccountType(accountType: string) {
+  const accountTypeNames: Record<string, string> = {
+    "401k plan": "401k",
+    "403b plan": "403b",
+    "457 plan": "457"
+  };
+
+  return accountTypeNames[accountType] || accountType;
+}
+
+function getClientLastName(clientName: string) {
+  const parts = clientName.trim().split(/\s+/).filter(Boolean);
+  return parts.at(-1) || "Client";
+}
+
+function formatTitleSegment(value: string) {
+  return value
+    .trim()
+    .replace(/&/g, "and")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 async function loadDatabaseTemplates() {

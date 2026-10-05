@@ -3,8 +3,10 @@ import { dmba401kHtmlTemplate, dmbaMergeFields, dmbaPensionHtmlTemplate } from "
 import { empowerHtmlTemplate, empowerMergeFields } from "./templates/empower";
 import { fidelityHtmlTemplate, fidelityMergeFields } from "./templates/fidelity";
 import { ihc401kHtmlTemplate, ihcMergeFields, ihcPensionHtmlTemplate, tRowePriceIhc401kHtmlTemplate } from "./templates/ihc";
+import { multiAdp401kFamilies, multiAdp401kHtmlTemplate, multiAdp401kMergeFields, multiHtmlTemplate, multiMergeFields, multiTemplateFamilies } from "./templates/multi";
 import { principal401kHtmlTemplate, principalMergeFields } from "./templates/principal";
-import { ursDefinedContributionHtmlTemplate, ursDefinedContributionMergeFields, ursPensionHtmlTemplate, ursPensionMergeFields } from "./templates/urs";
+import { tspAddendumHtmlTemplate, tspAddendumMergeFields, tspHtmlTemplate, tspMergeFields } from "./templates/tsp";
+import { ursAddendumHtmlTemplate, ursAddendumMergeFields, ursDefinedContributionHtmlTemplate, ursDefinedContributionMergeFields, ursPensionHtmlTemplate, ursPensionMergeFields } from "./templates/urs";
 import { withdrawalOfCounselHtmlTemplate, withdrawalOfCounselMergeFields } from "./templates/withdrawal-of-counsel";
 import type { DocumentTemplate, IntakeStep, QdroRequest, RequestStatus } from "./types";
 import { utahCourtOptions } from "./utah-courts";
@@ -229,6 +231,16 @@ export const intakeSteps: IntakeStep[] = [
           "IRA Traditional",
           "Other"
         ]
+      },
+      {
+        id: "tsp_account_type",
+        label: "Which TSP account type is this?",
+        type: "select",
+        required: true,
+        fullWidth: true,
+        constrained: true,
+        conditional: { field: "account_type", equals: "TSP" },
+        options: ["Civilian Account", "Uniformed Services Account", "Beneficiary Participant Account"]
       },
       {
         id: "has_employer",
@@ -477,6 +489,57 @@ export const documentTemplates: DocumentTemplate[] = [
     mergeFields: principalMergeFields
   },
   {
+    id: "multi-adp-401k-v1",
+    name: "Multi ADP 401k QDRO",
+    family: "Multi-template ADP 401k",
+    planFamilies: multiAdp401kFamilies,
+    accountTypes: ["401k plan"],
+    version: 1,
+    active: true,
+    description: "Handles 401k requests for ADP, Charles Schwab, John Hancock, Transamerica, and Vanguard.",
+    format: "html",
+    htmlBody: multiAdp401kHtmlTemplate,
+    mergeFields: multiAdp401kMergeFields
+  },
+  {
+    id: "multi-template-v1",
+    name: "Multi Template",
+    family: "Multi-template",
+    planFamilies: multiTemplateFamilies,
+    version: 1,
+    active: true,
+    description: "Handles requests for TIAA, Betterment, Merrill Lynch, Kroger, LPL Financial, PCS, Mass Mutual, Milliman, Mission Square, Northwestern Mutual, Wells Fargo, and Athene.",
+    format: "html",
+    htmlBody: multiHtmlTemplate,
+    mergeFields: multiMergeFields
+  },
+  {
+    id: "tsp-v1",
+    name: "TSP Retirement Benefits Court Order",
+    family: "TSP",
+    planFamilies: ["TSP"],
+    accountTypes: ["TSP"],
+    version: 1,
+    active: true,
+    description: "Thrift Savings Plan retirement benefits court order for TSP requests.",
+    format: "html",
+    htmlBody: tspHtmlTemplate,
+    mergeFields: tspMergeFields
+  },
+  {
+    id: "tsp-addendum-v1",
+    name: "TSP Addendum",
+    family: "Supplemental: TSP Addendum",
+    planFamilies: ["TSP"],
+    accountTypes: ["TSP"],
+    version: 1,
+    active: true,
+    description: "Personal information addendum required with TSP retirement benefits court orders.",
+    format: "html",
+    htmlBody: tspAddendumHtmlTemplate,
+    mergeFields: tspAddendumMergeFields
+  },
+  {
     id: "urs-defined-contribution-v1",
     name: "URS Defined Contribution DRO",
     family: "URS",
@@ -503,6 +566,18 @@ export const documentTemplates: DocumentTemplate[] = [
     mergeFields: ursPensionMergeFields
   },
   {
+    id: "urs-addendum-v1",
+    name: "URS Addendum",
+    family: "Supplemental: URS Addendum",
+    planFamilies: ["URS"],
+    version: 1,
+    active: true,
+    description: "Private separate addendum required with URS domestic relations orders.",
+    format: "html",
+    htmlBody: ursAddendumHtmlTemplate,
+    mergeFields: ursAddendumMergeFields
+  },
+  {
     id: "appearance-of-counsel-v1",
     name: "Appearance of Counsel",
     family: "Supplemental: Appearance of Counsel",
@@ -523,40 +598,6 @@ export const documentTemplates: DocumentTemplate[] = [
     format: "html",
     htmlBody: withdrawalOfCounselHtmlTemplate,
     mergeFields: withdrawalOfCounselMergeFields
-  },
-  {
-    id: "general-v1",
-    name: "General QDRO",
-    family: "Multi-template / other",
-    version: 1,
-    active: true,
-    description: "General starter order for plan-specific admin review.",
-    format: "plain",
-    mergeFields: [
-      "case_number",
-      "formal_plan_name",
-      "participant_name",
-      "alternate_payee_name",
-      "award_text",
-      "valuation_date",
-      "special_terms"
-    ],
-    body: `QUALIFIED DOMESTIC RELATIONS ORDER
-
-Case No. {{case_number}}
-
-Plan: {{formal_plan_name}}
-
-Participant: {{participant_name}}
-Alternate Payee: {{alternate_payee_name}}
-
-Award: {{award_text}}
-Valuation Date: {{valuation_date}}
-
-Special Terms:
-{{special_terms}}
-
-This preview is prepared from the client intake and should be reviewed by UtahQDRO before filing or sending to the plan administrator.`
   }
 ];
 

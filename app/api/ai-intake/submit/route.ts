@@ -56,7 +56,7 @@ export async function POST(req: Request) {
       status: "Submitted",
       paymentState: "unpaid",
       signatureState: "not_started",
-      templateFamily: String(fields.plan_family || "Multi-template / other"),
+      templateFamily: String(fields.plan_family || "Other"),
       fields,
       files: toRequestFiles(body.files || []),
       notes: [
