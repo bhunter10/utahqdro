@@ -748,7 +748,7 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
 
   return `<p style="margin: 0 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000;">David J. Hunter (9015)<br />
     3915 Timpview Dr., Provo, UT 84604<br />
-    801-473-4444 dave@utahmediations.com<br />
+    801-473-4444 help@utahqdro.com<br />
     <br />
     <em>Counsel for ${merge("counsel_for")}</em>
   </p>

@@ -14,7 +14,7 @@ export const appearanceOfCounselHtmlTemplate = `
   <p class="attorney-block">
     David J. Hunter (9015)<br />
     3915 Timpview Dr., Provo, UT 84604<br />
-    801-473-4444 dave@utahmediations.com
+    801-473-4444 help@utahqdro.com
   </p>
 
   <p class="counsel-line"><em>Counsel for {{counsel_for}}</em></p>
