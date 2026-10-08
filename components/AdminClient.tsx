@@ -12,7 +12,7 @@ import { findUtahCourt } from "@/lib/utah-courts";
 import { DocumentPreview } from "./DocumentPreview";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 
-const derivedRequestFieldIds = new Set(["amended_text", "court_county", "district", "prepared_for"]);
+const derivedRequestFieldIds = new Set(["amended_text", "court_county", "district", "prepared_for", "date_certified_sent_to_admin"]);
 const adminDocumentFields: IntakeField[] = [
   {
     id: "amended_text",
@@ -22,6 +22,14 @@ const adminDocumentFields: IntakeField[] = [
     constrained: true,
     placeholder: "Example: AMENDED",
     help: "Optional. Used in generated document titles and references, such as AMENDED QUALIFIED DOMESTIC RELATIONS ORDER."
+  },
+  {
+    id: "date_certified_sent_to_admin",
+    label: "Date certified sent to plan administrator",
+    type: "date",
+    fullWidth: true,
+    constrained: true,
+    help: "Internal tracking date for when the certified order was sent to the plan administrator."
   }
 ];
 type AdminTab = "requests" | "fields" | "templates";
@@ -882,7 +890,7 @@ function RequestTableRow({ request, onEdit }: { request: QdroRequest; onEdit: ()
   return (
     <tr>
       <td>
-        <span className={`status ${request.status === "Needs Client Info" ? "warn" : "info"}`}>{request.status}</span>
+        <span className={`status ${request.status === "Pending" ? "warn" : "info"}`}>{request.status}</span>
       </td>
       <td>
         <strong>{requester.name || request.clientName}</strong>

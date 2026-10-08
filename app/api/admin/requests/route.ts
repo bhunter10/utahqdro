@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/admin-access";
 import { getRequesterIdentity } from "@/lib/ai-intake";
 import { getAdminAuth, getAdminDb, getAdminStorageBucket } from "@/lib/firebase-admin";
-import type { QdroRequest, RequestStatus } from "@/lib/types";
+import { requestStatuses, type QdroRequest, type RequestStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -180,22 +180,7 @@ function normalizeRequest(id: string, data: FirebaseFirestore.DocumentData): Qdr
 }
 
 function normalizeStatus(status: unknown): RequestStatus {
-  const validStatuses: RequestStatus[] = [
-    "Draft",
-    "Submitted",
-    "Payment Pending",
-    "Paid",
-    "In Review",
-    "Needs Client Info",
-    "Draft Prepared",
-    "Sent for Signature",
-    "Filed with Court",
-    "Sent to Plan Administrator",
-    "Completed",
-    "Cancelled"
-  ];
-
-  return validStatuses.includes(status as RequestStatus) ? (status as RequestStatus) : "Submitted";
+  return requestStatuses.includes(status as RequestStatus) ? (status as RequestStatus) : "Pending";
 }
 
 function normalizeFields(fields: unknown) {

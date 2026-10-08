@@ -17,9 +17,32 @@ service cloud.firestore {
       return data.keys().hasAll(["ownerUid", "status", "paymentState", "signatureState", "fields", "createdAt", "updatedAt"])
         && data.ownerUid is string
         && data.status in [
-          "Draft", "Submitted", "Payment Pending", "Paid", "In Review",
-          "Needs Client Info", "Draft Prepared", "Sent for Signature",
-          "Filed with Court", "Sent to Plan Administrator", "Completed", "Cancelled"
+          "Pending",
+          "1 Approved Info",
+          "1.1 Pmt Req to Party1",
+          "1.2 Pmt Req to Party2",
+          "2 Paid in Full",
+          "3 Appearance Filed",
+          "4 Drafted Dave to Review",
+          "4.1 Ready for DocuSign",
+          "5 Reviewed, Out for Client Sign",
+          "6 Clients Signed, Filed in Court",
+          "7 Judge Signed, Get Certified",
+          "7.7 Send Cert to Admin E-MAIL",
+          "7.8 Send Cert to Admin FAX",
+          "7.9 Send Cert to Admin MAIL",
+          "8 Got Cert, Sent to Plan Admin",
+          "8.1 Email1 Client Status30",
+          "8.2 Email1 Admin Status30",
+          "8.3 Fax1 Admin Status30",
+          "8.4 Mail1 Admin Status30",
+          "8.5 Admin Status60",
+          "8.6 Admin Status90",
+          "8.7 Admin Status120+",
+          "9 Administrator Approved",
+          "9.1 Approved by Client",
+          "10 Withdrawal and Closed File",
+          "11 Archived"
         ]
         && data.paymentState in ["unpaid", "pending", "paid", "waived"]
         && data.signatureState in ["not_started", "sent", "partially_signed", "completed"]

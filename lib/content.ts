@@ -8,7 +8,7 @@ import { principal401kHtmlTemplate, principalMergeFields } from "./templates/pri
 import { tspAddendumHtmlTemplate, tspAddendumMergeFields, tspHtmlTemplate, tspMergeFields } from "./templates/tsp";
 import { ursAddendumHtmlTemplate, ursAddendumMergeFields, ursDefinedContributionHtmlTemplate, ursDefinedContributionMergeFields, ursPensionHtmlTemplate, ursPensionMergeFields } from "./templates/urs";
 import { withdrawalOfCounselHtmlTemplate, withdrawalOfCounselMergeFields } from "./templates/withdrawal-of-counsel";
-import type { DocumentTemplate, IntakeStep, QdroRequest, RequestStatus } from "./types";
+import { requestStatuses, type DocumentTemplate, type IntakeStep, type QdroRequest, type RequestStatus } from "./types";
 import { utahCourtOptions } from "./utah-courts";
 
 export const navigation = [
@@ -18,20 +18,7 @@ export const navigation = [
   { label: "Contact", href: "/contact" }
 ];
 
-export const statuses: RequestStatus[] = [
-  "Draft",
-  "Submitted",
-  "Payment Pending",
-  "Paid",
-  "In Review",
-  "Needs Client Info",
-  "Draft Prepared",
-  "Sent for Signature",
-  "Filed with Court",
-  "Sent to Plan Administrator",
-  "Completed",
-  "Cancelled"
-];
+export const statuses: RequestStatus[] = [...requestStatuses];
 
 export const qdroConsentText =
   "You are hiring Hunter Law, PLLC for the limited purpose of drafting a QDRO for your case, having the judge sign it, and sending it to the plan administrator for approval and division. We will not be involved in disputes about percentages, amounts, or the deductions, or offsets that may be necessary as part of the decree terms. These issues will need to be dealt with by the parties, their private legal counsel and the court, when necessary. This QDRO process normally takes 4-10 weeks. Attorney David Hunter will be making a limited appearance of counsel as counsel for you in the court system for this limited purpose of processing the QDRO with the court only. Until all the information requested in this form has been provided, no work will begin on your QDRO. The cost for this is $550 per QDRO and is earned in full when the QDRO is drafted and ready for client review. If the fee is to be paid one-half by each party, no work will be done on your case until both parties have paid in full. Any QDRO request that does not have full payment within 30 days will be closed, and the parties can resubmit a request with both sides are ready to make the required payment. Any refunds will subtract credit card processing fees and time for work done on the matter up to work done through the time of the refund. If an amended QDRO is needed to complete the process and it was our fault, we will do one amended QDRO at no cost, if it was a party’s fault (such as giving us the wrong formal plan name or other missing or inaccurate information given by a party or listed on a screenshot or on a statement provided by the parties) then amendments will incur additional fees (usually $275-$375 depending on the situation). Payment for amendments must be paid before an amendment is drafted and signed by the parties and court. If updates on the progress of a QDRO is desired a party from a plan administrator, the parties will be solely responsible for for contacting the plan administrator for such updates as desired.";
@@ -606,7 +593,7 @@ export const demoRequest: QdroRequest = {
   ownerUid: "demo-client",
   clientName: "Jordan Client",
   clientEmail: "client@example.com",
-  status: "In Review",
+  status: "4 Drafted Dave to Review",
   paymentState: "paid",
   signatureState: "sent",
   templateFamily: "Fidelity",
@@ -691,7 +678,7 @@ export const sampleRequests: QdroRequest[] = [
     id: "QDRO-2026-002",
     clientName: "Morgan Smith",
     clientEmail: "morgan@example.com",
-    status: "Needs Client Info",
+    status: "Pending",
     paymentState: "pending",
     signatureState: "not_started",
     templateFamily: "URS",
@@ -709,7 +696,7 @@ export const sampleRequests: QdroRequest[] = [
     id: "QDRO-2026-003",
     clientName: "Alex Rivera",
     clientEmail: "alex@example.com",
-    status: "Sent for Signature",
+    status: "5 Reviewed, Out for Client Sign",
     paymentState: "paid",
     signatureState: "partially_signed",
     templateFamily: "TSP",

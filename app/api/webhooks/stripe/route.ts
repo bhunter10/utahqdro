@@ -37,7 +37,7 @@ export async function POST(req: Request) {
       await db.collection("requests").doc(requestId).set(
         {
           paymentState: "paid",
-          status: "Paid",
+          status: "2 Paid in Full",
           updatedAt: new Date().toISOString(),
           stripeSessionId: session.id
         },

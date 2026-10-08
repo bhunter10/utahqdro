@@ -13,6 +13,7 @@ build/
 # environment
 .env
 .env*.local
+private-imports/
 
 # Vercel
 .vercel/

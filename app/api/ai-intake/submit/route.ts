@@ -53,7 +53,7 @@ export async function POST(req: Request) {
       ownerUid: decoded.uid,
       clientName,
       clientEmail,
-      status: "Submitted",
+      status: "Pending",
       paymentState: "unpaid",
       signatureState: "not_started",
       templateFamily: String(fields.plan_family || "Other"),
