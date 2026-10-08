@@ -196,10 +196,44 @@ export function IntakeWizard() {
   }
 
   async function beginCheckout() {
+    if (!clientUser || !db) {
+      alert("Sign in before continuing to payment.");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const requestId = `QDRO-${Date.now()}`;
+    const requester = getRequesterIdentity(data, clientUser.email || "");
+    const requestToSave: QdroRequest = {
+      id: requestId,
+      ownerUid: clientUser.uid,
+      clientName: requester.name,
+      clientEmail: requester.email,
+      status: "Payment Pending",
+      paymentState: "pending",
+      signatureState: "not_started",
+      templateFamily: String(data.plan_family || "Other"),
+      fields: data,
+      files: [],
+      notes: [
+        {
+          id: `client-note-${Date.now()}`,
+          author: "Client intake",
+          visibility: "internal",
+          body: "Submitted through /qdro-request and sent to payment.",
+          createdAt: now
+        }
+      ],
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await setDoc(doc(db, "requests", requestId), requestToSave);
+
     const response = await fetch("/api/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requestId: request.id })
+      body: JSON.stringify({ requestId })
     });
     const payload = (await response.json()) as { url?: string; message?: string };
     setSubmitted(true);

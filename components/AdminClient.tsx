@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getRequesterIdentity, normalizeAiFieldValue } from "@/lib/ai-intake";
 import { intakeSteps, sampleRequests, statuses } from "@/lib/content";
-import { getEditableTemplateBody, selectTemplateFromList } from "@/lib/document-engine";
+import { getEditableTemplateBody } from "@/lib/document-engine";
 import { formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
 import { auth, missingFirebaseConfig } from "@/lib/firebase";
 import type { DocumentTemplate, IntakeField, QdroRequest, RequestFile, RequestStatus } from "@/lib/types";
@@ -821,7 +821,7 @@ function RequestDetailModal({
 }) {
   const [showPreview, setShowPreview] = useState(false);
   const requester = getRequesterIdentity(request.fields, request.clientEmail);
-  const selectedPreviewTemplate = selectTemplateFromList(request, templates);
+  const clientPartyHeading = getClientPartyHeading(request);
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -835,13 +835,7 @@ function RequestDetailModal({
         <div className="modal-head">
           <div>
             <span className="status info">{getEntityType(request)} · {getAccountType(request)}</span>
-            <h2 id="request-modal-title" style={{ marginTop: 12 }}>{requester.name || request.clientName}</h2>
-            <p>
-              {requester.email || request.clientEmail} · {getEntityType(request)} · Total {formatCurrency(getRequestTotal(request))}
-            </p>
-            <p>
-              Template: {getTemplatePickerLabel(selectedPreviewTemplate.name)}
-            </p>
+            <h2 id="request-modal-title" style={{ marginTop: 12 }}>{clientPartyHeading || requester.name || request.clientName}</h2>
           </div>
           <div className="modal-head-actions">
             <button className="button secondary" type="button" onClick={() => setShowPreview(!showPreview)}>
@@ -947,7 +941,6 @@ function RequestEditor({
         <section className="admin-intake-step">
           <div>
             <span className="status info">Document settings</span>
-            <p>Backend-only values used when generating and exporting documents.</p>
           </div>
           <div className="field-grid">
             {adminDocumentFields.map((field) => (
@@ -964,7 +957,6 @@ function RequestEditor({
           <section className="admin-intake-step">
             <div>
               <span className="status info">Uploaded documents</span>
-              <p>Files saved with this request.</p>
             </div>
             <div className="ai-file-list">
               {request.files.map((file) => (
@@ -1352,6 +1344,22 @@ function getEntityType(request: QdroRequest) {
 
 function getAccountType(request: QdroRequest) {
   return String(request.fields.account_type || "—");
+}
+
+function getClientPartyHeading(request: QdroRequest) {
+  const party1Name = String(request.fields.party1_name || "").trim();
+  const party2Name = String(request.fields.party2_name || "").trim();
+  const requesterRole = String(request.fields.requester_role || "");
+  const requesterAffiliation = String(request.fields.requester_affiliation || "");
+
+  const clientIsParty2 =
+    requesterRole === "I am the second name listed in the court case title" ||
+    (requesterRole === "I am requesting this for someone else" && requesterAffiliation === "Party 2");
+
+  if (clientIsParty2 && party1Name && party2Name) return `${party2Name} vs. ${party1Name}`;
+
+  if (party1Name && party2Name) return `${party1Name} vs. ${party2Name}`;
+  return party1Name || party2Name;
 }
 
 function getTemplatePickerLabel(templateName: string) {

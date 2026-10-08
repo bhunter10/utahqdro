@@ -737,6 +737,25 @@ p {
   color: var(--ink);
 }
 
+.select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #475467 50%),
+    linear-gradient(135deg, #475467 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 19px,
+    calc(100% - 13px) 19px;
+  background-repeat: no-repeat;
+  background-size:
+    5px 5px,
+    5px 5px;
+  padding-right: 42px;
+}
+
+.select:disabled {
+  color: #98a2b3;
+}
+
 .input,
 .select {
   height: 44px;
@@ -1470,8 +1489,6 @@ th {
 .admin-intake-step {
   display: grid;
   gap: 14px;
-  border-top: 1px solid var(--line);
-  padding-top: 18px;
 }
 
 .admin-intake-step p {
