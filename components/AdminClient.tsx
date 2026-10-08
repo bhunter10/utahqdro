@@ -12,7 +12,7 @@ import { findUtahCourt } from "@/lib/utah-courts";
 import { DocumentPreview } from "./DocumentPreview";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 
-const derivedRequestFieldIds = new Set(["amended_text", "court_county", "district", "prepared_for", "date_certified_sent_to_admin"]);
+const derivedRequestFieldIds = new Set(["amended_text", "court_county", "district", "prepared_for", "date_certified_sent_to_admin", "total"]);
 const adminDocumentFields: IntakeField[] = [
   {
     id: "amended_text",
@@ -1413,7 +1413,15 @@ function escapeHtml(value: string) {
 }
 
 function getRequestTotal(request: QdroRequest) {
-  return request.paymentState === "waived" ? 0 : 550;
+  if (request.paymentState === "waived") return 0;
+
+  const fieldTotal = request.fields.total;
+  if (typeof fieldTotal === "string") {
+    const numericTotal = Number(fieldTotal.replace(/[$,]/g, ""));
+    if (Number.isFinite(numericTotal)) return numericTotal;
+  }
+
+  return 550;
 }
 
 function formatCurrency(amount: number) {

@@ -201,8 +201,9 @@ function normalizeAwardee(value) {
 
 function normalizeMarketAdjustment(value) {
   const normalized = clean(value).toLowerCase();
-  if (normalized === "yes") return "The decree says interest, gains, and losses are included";
+  if (normalized === "yes") return "The decree does not say anything about interest, gains, or losses";
   if (normalized === "no") return "The decree says interest, gains, and losses are excluded";
+  if (!normalized) return "The decree does not say anything about interest, gains, or losses";
   return clean(value);
 }
 
@@ -316,7 +317,6 @@ function buildFields(reader) {
     party1_address_city: reader.byHeader("Party 1 current mailing address (City)"),
     party1_address_state: reader.byHeader("Party 1 current mailing address (State)"),
     party1_address_zip: reader.byHeader("Party 1 current mailing address (ZIP / Postal Code)"),
-    party1_full_address: joinAddress(reader, "Party 1 current mailing address"),
     party1_ssn: reader.byHeader("Party 1 SSN"),
     party1_dob: normalizeDate(reader.byHeader("Party 1 birth date")),
     party2_name: party2Name,
@@ -327,7 +327,6 @@ function buildFields(reader) {
     party2_address_city: reader.byHeader("Party 2 current mailing address (City)"),
     party2_address_state: reader.byHeader("Party 2 current mailing address (State)"),
     party2_address_zip: reader.byHeader("Party 2 current mailing address (ZIP / Postal Code)"),
-    party2_full_address: joinAddress(reader, "Party 2 current mailing address"),
     party2_ssn: reader.byHeader("Party 2 SSN"),
     party2_dob: normalizeDate(reader.byHeader("Party 2 birth date")),
     plan_family: normalizePlanFamily(reader),
