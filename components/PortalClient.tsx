@@ -144,7 +144,7 @@ export function PortalClient() {
           <article className="card">
             <span className="status">{demoRequest.paymentState}</span>
             <h3 style={{ marginTop: 14 }}>Payment</h3>
-            <p>Stripe payment is recorded before drafting begins.</p>
+            <p>Square payment is recorded before drafting begins.</p>
           </article>
           <article className="card">
             <span className="status warn">{demoRequest.signatureState.replaceAll("_", " ")}</span>

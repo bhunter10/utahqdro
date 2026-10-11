@@ -39,6 +39,18 @@ export async function GET(req: Request) {
     const file = Array.isArray(files) ? files.find((item) => item?.id === fileId) : null;
     const storagePath = typeof file?.storagePath === "string" ? file.storagePath : getStoragePathFromFileUrl(file?.url);
     if (!storagePath) {
+      const fallbackUrl = typeof file?.url === "string" ? file.url : "";
+      if (fallbackUrl) {
+        if (isWordPressUrl(fallbackUrl)) {
+          return NextResponse.json(
+            { message: "This old WordPress file has not been migrated to Firebase Storage yet." },
+            { status: 404 }
+          );
+        }
+
+        return NextResponse.json({ url: fallbackUrl });
+      }
+
       return NextResponse.json({ message: "No Storage path was saved for this file." }, { status: 404 });
     }
 
@@ -71,5 +83,14 @@ function getStoragePathFromFileUrl(url: string | undefined) {
     return match ? decodeURIComponent(match[1]) : "";
   } catch {
     return "";
+  }
+}
+
+function isWordPressUrl(url: string) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "utahqdro.com" || host.endsWith(".utahqdro.com");
+  } catch {
+    return false;
   }
 }

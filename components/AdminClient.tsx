@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getRequesterIdentity, normalizeAiFieldValue } from "@/lib/ai-intake";
-import { intakeSteps, sampleRequests, statuses } from "@/lib/content";
+import { intakeSteps, statuses } from "@/lib/content";
 import { getEditableTemplateBody } from "@/lib/document-engine";
-import { formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
+import { formatFieldOptionLabel, formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
 import { auth, missingFirebaseConfig } from "@/lib/firebase";
 import type { DocumentTemplate, IntakeField, QdroRequest, RequestFile, RequestStatus } from "@/lib/types";
 import { findUtahCourt } from "@/lib/utah-courts";
@@ -34,6 +34,7 @@ const adminDocumentFields: IntakeField[] = [
 ];
 type AdminTab = "requests" | "fields" | "templates";
 type AdminAccessState = "checking" | "allowed" | "denied" | "error";
+type AdminUploadType = "certified_qdro" | "approval_letter" | "appearance_of_counsel" | "withdrawal_of_counsel";
 
 function adminTabFromPath(pathname: string): AdminTab {
   if (pathname.startsWith("/admin/fields")) return "fields";
@@ -46,7 +47,7 @@ export function AdminClient() {
   const pathname = usePathname();
   const isLoginScreen = pathname === "/admin";
   const tab = adminTabFromPath(pathname);
-  const [requests, setRequests] = useState(sampleRequests);
+  const [requests, setRequests] = useState<QdroRequest[]>([]);
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [adminUser, setAdminUser] = useState<User | null>(null);
   const [adminEmail, setAdminEmail] = useState("");
@@ -61,6 +62,8 @@ export function AdminClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dirtyRequestIds, setDirtyRequestIds] = useState<string[]>([]);
   const [savingRequestId, setSavingRequestId] = useState("");
+  const [uploadingRequestId, setUploadingRequestId] = useState("");
+  const [removingFileId, setRemovingFileId] = useState("");
 
   const filtered = useMemo(() => {
     const normalized = query.toLowerCase();
@@ -182,11 +185,12 @@ export function AdminClient() {
         return response.status === 401 || response.status === 403 ? "denied" : "error";
       }
       if (!result.requests?.length) {
-        setRequestStatus(result.message || "No database requests found yet. Showing demo requests.");
+        setRequests([]);
+        setRequestStatus(result.message || "No database requests found yet.");
         return "allowed";
       }
 
-      setRequests(mergeRequests(result.requests, sampleRequests));
+      setRequests(result.requests);
       setRequestStatus("");
       return "allowed";
     } catch (error) {
@@ -352,6 +356,80 @@ export function AdminClient() {
       const message = error instanceof Error ? error.message : "Could not open uploaded file.";
       setRequestStatus(message);
       writeFileWindowMessage(fileWindow, message);
+    }
+  }
+
+  async function uploadAdminFile(requestId: string, uploadType: AdminUploadType, files: FileList | null) {
+    if (!files?.length) return false;
+
+    const token = await getAdminToken();
+    if (!token) {
+      setRequestStatus("Sign in as an admin to upload files.");
+      return false;
+    }
+
+    const formData = new FormData();
+    formData.append("requestId", requestId);
+    formData.append("uploadType", uploadType);
+    Array.from(files).forEach((file) => formData.append("files", file));
+
+    try {
+      setUploadingRequestId(requestId);
+      const response = await fetch("/api/admin/upload-file", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+      const result = (await response.json()) as { message?: string; request?: QdroRequest };
+      if (!response.ok || !result.request) {
+        setRequestStatus(result.message || "Could not upload file.");
+        return false;
+      }
+
+      setRequests((current) => current.map((item) => item.id === requestId ? result.request as QdroRequest : item));
+      setRequestStatus(result.message || "File uploaded.");
+      return true;
+    } catch (error) {
+      setRequestStatus(error instanceof Error ? error.message : "Could not upload file.");
+      return false;
+    } finally {
+      setUploadingRequestId("");
+    }
+  }
+
+  async function removeUploadedFile(requestId: string, file: RequestFile) {
+    if (!window.confirm(`Remove ${file.label}: ${file.fileName}?`)) return false;
+
+    const token = await getAdminToken();
+    if (!token) {
+      setRequestStatus("Sign in as an admin to remove files.");
+      return false;
+    }
+
+    try {
+      setRemovingFileId(file.id);
+      const response = await fetch("/api/admin/request-file/delete", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ requestId, fileId: file.id })
+      });
+      const result = (await response.json()) as { message?: string; request?: QdroRequest };
+      if (!response.ok || !result.request) {
+        setRequestStatus(result.message || "Could not remove file.");
+        return false;
+      }
+
+      setRequests((current) => current.map((item) => item.id === requestId ? result.request as QdroRequest : item));
+      setRequestStatus(result.message || "File removed.");
+      return true;
+    } catch (error) {
+      setRequestStatus(error instanceof Error ? error.message : "Could not remove file.");
+      return false;
+    } finally {
+      setRemovingFileId("");
     }
   }
 
@@ -625,9 +703,13 @@ export function AdminClient() {
             updateInternalNotes={updateInternalNotes}
             deleteRequest={deleteRequest}
             openUploadedFile={openUploadedFile}
+            uploadAdminFile={uploadAdminFile}
+            removeUploadedFile={removeUploadedFile}
             saveRequestChanges={saveRequestChanges}
             hasUnsavedChanges={dirtyRequestIds.includes(selected.id)}
             isSaving={savingRequestId === selected.id}
+            isUploadingFile={uploadingRequestId === selected.id}
+            removingFileId={removingFileId}
             onClose={() => setSelectedId(null)}
           />
         )}
@@ -810,9 +892,13 @@ function RequestDetailModal({
   updateInternalNotes,
   deleteRequest,
   openUploadedFile,
+  uploadAdminFile,
+  removeUploadedFile,
   saveRequestChanges,
   hasUnsavedChanges,
   isSaving,
+  isUploadingFile,
+  removingFileId,
   onClose
 }: {
   request: QdroRequest;
@@ -822,14 +908,27 @@ function RequestDetailModal({
   updateInternalNotes: (id: string, body: string) => void;
   deleteRequest: (id: string) => Promise<boolean>;
   openUploadedFile: (requestId: string, file: RequestFile) => Promise<void>;
+  uploadAdminFile: (requestId: string, uploadType: AdminUploadType, files: FileList | null) => Promise<boolean>;
+  removeUploadedFile: (requestId: string, file: RequestFile) => Promise<boolean>;
   saveRequestChanges: (request: QdroRequest) => Promise<void>;
   hasUnsavedChanges: boolean;
   isSaving: boolean;
+  isUploadingFile: boolean;
+  removingFileId: string;
   onClose: () => void;
 }) {
   const [showPreview, setShowPreview] = useState(false);
   const requester = getRequesterIdentity(request.fields, request.clientEmail);
   const clientPartyHeading = getClientPartyHeading(request);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -867,6 +966,11 @@ function RequestDetailModal({
             updateInternalNotes={updateInternalNotes}
             deleteRequest={deleteRequest}
             openUploadedFile={openUploadedFile}
+            uploadAdminFile={uploadAdminFile}
+            removeUploadedFile={removeUploadedFile}
+            isUploadingFile={isUploadingFile}
+            removingFileId={removingFileId}
+            onClose={onClose}
           />
         </div>
         {!showPreview && (
@@ -917,7 +1021,12 @@ function RequestEditor({
   updateField,
   updateInternalNotes,
   deleteRequest,
-  openUploadedFile
+  openUploadedFile,
+  uploadAdminFile,
+  removeUploadedFile,
+  isUploadingFile,
+  removingFileId,
+  onClose
 }: {
   request: QdroRequest;
   updateStatus: (id: string, status: RequestStatus) => void;
@@ -925,12 +1034,32 @@ function RequestEditor({
   updateInternalNotes: (id: string, body: string) => void;
   deleteRequest: (id: string) => Promise<boolean>;
   openUploadedFile: (requestId: string, file: RequestFile) => Promise<void>;
+  uploadAdminFile: (requestId: string, uploadType: AdminUploadType, files: FileList | null) => Promise<boolean>;
+  removeUploadedFile: (requestId: string, file: RequestFile) => Promise<boolean>;
+  isUploadingFile: boolean;
+  removingFileId: string;
+  onClose: () => void;
 }) {
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [adminUploadType, setAdminUploadType] = useState<AdminUploadType>("certified_qdro");
   const schemaFieldIds = new Set(intakeSteps.flatMap((step) => step.fields.map((field) => field.id)));
+  const hiddenAdminFieldIds = new Set(["client_signature", "entity_name", "wordpress_client_signature_url", "wordpress_status"]);
   const extraFields = Object.entries(request.fields).filter(
-    ([field, value]) => field !== "client_signature" && !schemaFieldIds.has(field) && !derivedRequestFieldIds.has(field) && hasDisplayValue(value)
+    ([field, value]) => !hiddenAdminFieldIds.has(field) && !schemaFieldIds.has(field) && !derivedRequestFieldIds.has(field) && hasDisplayValue(value)
   );
   const clientSignature = typeof request.fields.client_signature === "string" ? request.fields.client_signature : "";
+
+  async function handleDeleteRequest() {
+    if (isDeleting || !window.confirm("Delete this request and its uploaded files?")) return;
+
+    setIsDeleting(true);
+    const wasDeleted = await deleteRequest(request.id);
+    if (wasDeleted) {
+      onClose();
+      return;
+    }
+    setIsDeleting(false);
+  }
 
   return (
     <section className="panel">
@@ -961,26 +1090,85 @@ function RequestEditor({
             ))}
           </div>
         </section>
+        <section className="admin-intake-step">
+          <div>
+            <span className="status info">Internal uploads</span>
+          </div>
+          <div className="admin-upload-row">
+            <label className="field compact-upload-field">
+              <span>Document type</span>
+              <select className="select" value={adminUploadType} onChange={(event) => setAdminUploadType(event.target.value as AdminUploadType)}>
+                <option value="certified_qdro">Certified QDRO</option>
+                <option value="approval_letter">Approval letter or Proof of Division</option>
+                <option value="appearance_of_counsel">Appearance of Counsel</option>
+                <option value="withdrawal_of_counsel">Withdrawal of Counsel</option>
+              </select>
+            </label>
+            <label className="button secondary compact-action admin-upload-button">
+              {isUploadingFile ? "Uploading..." : "Attach file"}
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
+                multiple
+                disabled={isUploadingFile}
+                onChange={async (event) => {
+                  const didUpload = await uploadAdminFile(request.id, adminUploadType, event.target.files);
+                  if (didUpload) event.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+        </section>
         {request.files.length > 0 && (
           <section className="admin-intake-step">
             <div>
               <span className="status info">Uploaded documents</span>
             </div>
             <div className="ai-file-list">
-              {request.files.map((file) => (
-                <article className="mini-check" key={file.id}>
-                  <span className="icon">✓</span>
-                  <span>
-                    <strong>{file.label}</strong>
-                    <small style={{ display: "block", color: "var(--muted)" }}>{file.fileName}</small>
-                    {(file.storagePath || file.url) && (
-                      <button className="muted-link inline-button" type="button" onClick={() => openUploadedFile(request.id, file)}>
-                        Open uploaded file
-                      </button>
-                    )}
-                  </span>
-                </article>
-              ))}
+              {request.files.map((file) => {
+                const canOpenFile = Boolean(file.storagePath || (file.url && !isWordPressUploadUrl(file.url)));
+                const canRemoveFile = canRemoveUploadedFile(file);
+                return (
+                  <article className="mini-check" key={file.id}>
+                    <span className="icon">✓</span>
+                    <span>
+                      <strong>{file.label}</strong>
+                      <small style={{ display: "block", color: "var(--muted)" }}>{file.fileName}</small>
+                      {canOpenFile ? (
+                        <span className="file-action-row">
+                          <button className="muted-link inline-button" type="button" onClick={() => openUploadedFile(request.id, file)}>
+                            Open uploaded file
+                          </button>
+                          {canRemoveFile && (
+                            <button
+                              className="muted-link inline-button danger-link"
+                              type="button"
+                              disabled={removingFileId === file.id}
+                              onClick={() => void removeUploadedFile(request.id, file)}
+                            >
+                              {removingFileId === file.id ? "Removing..." : "Remove"}
+                            </button>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="file-action-row">
+                          <small style={{ display: "block", color: "var(--muted)" }}>Needs migration from old WordPress storage</small>
+                          {canRemoveFile && (
+                            <button
+                              className="muted-link inline-button danger-link"
+                              type="button"
+                              disabled={removingFileId === file.id}
+                              onClick={() => void removeUploadedFile(request.id, file)}
+                            >
+                              {removingFileId === file.id ? "Removing..." : "Remove"}
+                            </button>
+                          )}
+                        </span>
+                      )}
+                    </span>
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
@@ -1038,13 +1226,10 @@ function RequestEditor({
           <button
             className="button danger"
             type="button"
-            onClick={() => {
-              if (window.confirm("Delete this request and its uploaded files?")) {
-                void deleteRequest(request.id);
-              }
-            }}
+            onClick={() => void handleDeleteRequest()}
+            disabled={isDeleting}
           >
-            Delete request
+            {isDeleting ? "Deleting..." : "Delete request"}
           </button>
         </div>
       </div>
@@ -1080,7 +1265,6 @@ function AdminFieldControl({
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       updateField(request.id, field.id, isSsnField ? formatSsnInput(event.target.value) : isPhoneField ? formatPhoneInput(event.target.value) : event.target.value)
   };
-  const conditionalHelp = getConditionalHelp(field, request.fields);
   const fieldClassName = ["field", field.fullWidth ? "full-field" : "", field.constrained ? "constrained-field" : ""].filter(Boolean).join(" ");
   const options = getAdminFieldOptions(field);
 
@@ -1089,7 +1273,6 @@ function AdminFieldControl({
       <fieldset className="field full-field radio-field">
         <legend>{field.label}</legend>
         {field.help && <small>{field.help}</small>}
-        {conditionalHelp && <small>{conditionalHelp}</small>}
         <div className="choice-row">
           {options.map((option) => (
             <label className="choice" key={option}>
@@ -1099,7 +1282,7 @@ function AdminFieldControl({
                 checked={value === option}
                 onChange={() => updateField(request.id, field.id, option)}
               />
-              <span>{option}</span>
+              <span>{formatFieldOptionLabel(field.id, option)}</span>
             </label>
           ))}
         </div>
@@ -1112,12 +1295,11 @@ function AdminFieldControl({
       <div className={fieldClassName}>
         <label htmlFor={inputId}>{field.label}</label>
         {field.help && <small>{field.help}</small>}
-        {conditionalHelp && <small>{conditionalHelp}</small>}
         <select className="select" {...common}>
           <option value="">Choose one</option>
           {options.map((option) => (
             <option value={option} key={option}>
-              {option}
+              {formatFieldOptionLabel(field.id, option)}
             </option>
           ))}
         </select>
@@ -1130,7 +1312,6 @@ function AdminFieldControl({
       <div className="field full-field">
         <label htmlFor={inputId}>{field.label}</label>
         {field.help && <small>{field.help}</small>}
-        {conditionalHelp && <small>{conditionalHelp}</small>}
         <textarea className="textarea" {...common} placeholder={field.placeholder} />
       </div>
     );
@@ -1141,7 +1322,6 @@ function AdminFieldControl({
       <div className="field">
         <label htmlFor={inputId}>{field.label}</label>
         {field.help && <small>{field.help}</small>}
-        {conditionalHelp && <small>{conditionalHelp}</small>}
         <input
           className="input"
           id={inputId}
@@ -1170,7 +1350,6 @@ function AdminFieldControl({
     <div className={fieldClassName}>
       <label htmlFor={inputId}>{field.label}</label>
       {field.help && <small>{field.help}</small>}
-      {conditionalHelp && <small>{conditionalHelp}</small>}
       <input
         className="input"
         {...common}
@@ -1257,22 +1436,66 @@ function InternalNotes({
   request: QdroRequest;
   updateInternalNotes: (id: string, body: string) => void;
 }) {
-  const internalNoteText = request.notes
+  const editorRef = useRef<HTMLDivElement>(null);
+  const internalNoteBody = request.notes
     .filter((note) => note.visibility === "internal")
     .map((note) => note.body)
     .join("\n\n");
+  const editorHtml = formatNoteBodyForEditor(internalNoteBody);
+
+  useEffect(() => {
+    if (!editorRef.current || editorRef.current.innerHTML === editorHtml) return;
+    editorRef.current.innerHTML = editorHtml;
+  }, [editorHtml, request.id]);
+
+  function applyFormat(command: "bold" | "italic" | "underline" | "insertUnorderedList" | "insertOrderedList") {
+    editorRef.current?.focus();
+    document.execCommand(command);
+    updateInternalNotes(request.id, editorRef.current?.innerHTML || "");
+  }
+
+  function syncNotes() {
+    updateInternalNotes(request.id, editorRef.current?.innerHTML || "");
+  }
 
   return (
     <section className="admin-intake-step internal-notes">
-      <div className="field">
-        <label htmlFor={`internal-notes-${request.id}`}>Internal Notes</label>
-        <textarea
-          className="textarea internal-notes-textarea"
-          id={`internal-notes-${request.id}`}
-          value={internalNoteText}
-          onChange={(event) => updateInternalNotes(request.id, event.target.value)}
-          placeholder="Add internal notes for this request."
-        />
+      <div className="template-editor internal-notes-editor">
+        <div className="template-editor-head">
+          <label htmlFor={`internal-notes-${request.id}`}>Internal Notes</label>
+        </div>
+        <div className="template-editor-shell">
+          <div className="template-editor-toolbar" aria-label="Internal notes formatting controls">
+            <FormatButton label="Bold" onClick={() => applyFormat("bold")}>
+              <strong>B</strong>
+            </FormatButton>
+            <FormatButton label="Italic" onClick={() => applyFormat("italic")}>
+              <em>I</em>
+            </FormatButton>
+            <FormatButton label="Underline" onClick={() => applyFormat("underline")}>
+              <span className="template-format-underline">U</span>
+            </FormatButton>
+            <span className="template-format-divider" aria-hidden="true" />
+            <FormatButton label="Bulleted list" onClick={() => applyFormat("insertUnorderedList")}>
+              <ListIcon ordered={false} />
+            </FormatButton>
+            <FormatButton label="Numbered list" onClick={() => applyFormat("insertOrderedList")}>
+              <ListIcon ordered />
+            </FormatButton>
+          </div>
+          <div
+            className="template-body-editor internal-notes-html-editor"
+            contentEditable
+            data-placeholder="Add internal notes for this request."
+            id={`internal-notes-${request.id}`}
+            ref={editorRef}
+            role="textbox"
+            aria-multiline="true"
+            onBlur={syncNotes}
+            onInput={syncNotes}
+            suppressContentEditableWarning
+          />
+        </div>
       </div>
     </section>
   );
@@ -1310,7 +1533,7 @@ function getUpdatedRequestFields(fields: QdroRequest["fields"], field: string, v
 }
 
 function getUpdatedInternalNotes(notes: QdroRequest["notes"], body: string): QdroRequest["notes"] {
-  const trimmedBody = body.trim();
+  const trimmedBody = stripHtml(body).trim();
   const externalNotes = notes.filter((note) => note.visibility !== "internal");
   if (!trimmedBody) return externalNotes;
 
@@ -1320,11 +1543,85 @@ function getUpdatedInternalNotes(notes: QdroRequest["notes"], body: string): Qdr
     {
       id: existingInternalNote?.id || "internal-note",
       author: existingInternalNote?.author || "Admin",
-      body,
+      body: sanitizeNoteHtml(body),
       visibility: "internal",
       createdAt: existingInternalNote?.createdAt || new Date().toISOString()
     }
   ];
+}
+
+function formatNoteBodyForEditor(body: string) {
+  const normalizedBody = decodeNoteHtmlEntities(body).replace(/\r\n?/g, "\n");
+  const trimmed = normalizedBody.trim();
+  if (!trimmed) return "";
+  if (/<[a-z][\s\S]*>/i.test(trimmed)) return sanitizeNoteHtml(trimmed);
+
+  return formatPlainNoteText(trimmed)
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+function formatPlainNoteText(value: string) {
+  return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
+function decodeNoteHtmlEntities(value: string) {
+  if (!/&(?:lt|gt|amp|quot|#039|apos|nbsp);/i.test(value)) return value;
+
+  return value
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#039;|&apos;/gi, "'")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&");
+}
+
+function sanitizeNoteHtml(html: string) {
+  if (typeof window === "undefined") return html;
+
+  const allowedTags = new Set(["A", "B", "BR", "DIV", "EM", "I", "LI", "OL", "P", "SPAN", "STRONG", "U", "UL"]);
+  const template = document.createElement("template");
+  template.innerHTML = html;
+
+  function cleanNode(node: Node) {
+    [...node.childNodes].forEach((child) => {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const element = child as HTMLElement;
+        if (!allowedTags.has(element.tagName)) {
+          element.replaceWith(...Array.from(element.childNodes));
+          return;
+        }
+
+        [...element.attributes].forEach((attribute) => {
+          const name = attribute.name.toLowerCase();
+          if (element.tagName === "A" && name === "href" && /^(https?:|mailto:|tel:)/i.test(attribute.value)) return;
+          element.removeAttribute(attribute.name);
+        });
+      }
+      cleanNode(child);
+    });
+  }
+
+  cleanNode(template.content);
+  return template.innerHTML;
+}
+
+function stripHtml(html: string) {
+  if (typeof window === "undefined") return html.replace(/<[^>]*>/g, " ");
+  const element = document.createElement("div");
+  element.innerHTML = sanitizeNoteHtml(html);
+  return element.textContent || "";
+}
+
+function canRemoveUploadedFile(file: RequestFile) {
+  return (
+    file.id.startsWith("admin-certified_qdro-") ||
+    file.id.startsWith("admin-approval_letter-") ||
+    file.id.startsWith("admin-appearance_of_counsel-") ||
+    file.id.startsWith("admin-withdrawal_of_counsel-")
+  );
 }
 
 function getFirebaseAuthMessage(error: unknown) {
@@ -1386,21 +1683,23 @@ function getTemplateMetaLabel(template: DocumentTemplate) {
   return `Plan: ${plan}`;
 }
 
-function mergeRequests(primary: QdroRequest[], fallback: QdroRequest[]) {
-  const seen = new Set<string>();
-  return [...primary, ...fallback].filter((request) => {
-    if (seen.has(request.id)) return false;
-    seen.add(request.id);
-    return true;
-  });
-}
-
 function writeFileWindowMessage(fileWindow: Window | null, message: string) {
   fileWindow?.document.open();
   fileWindow?.document.write(
     `<p style="font-family: system-ui, sans-serif; padding: 24px; line-height: 1.5;">${escapeHtml(message)}</p>`
   );
   fileWindow?.document.close();
+}
+
+function isWordPressUploadUrl(url: string | undefined) {
+  if (!url) return false;
+
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "utahqdro.com" || host.endsWith(".utahqdro.com");
+  } catch {
+    return false;
+  }
 }
 
 function escapeHtml(value: string) {

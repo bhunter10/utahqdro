@@ -12,8 +12,10 @@ const write = args.has("--write");
 const replaceExisting = args.has("--replace-existing");
 const inputArg = process.argv.find((arg) => arg.startsWith("--input="));
 const limitArg = process.argv.find((arg) => arg.startsWith("--limit="));
+const statusArg = process.argv.find((arg) => arg.startsWith("--status="));
 const inputPath = inputArg ? path.resolve(inputArg.slice("--input=".length)) : defaultInput;
 const limit = limitArg ? Number(limitArg.slice("--limit=".length)) : 0;
+const statusFilter = statusArg ? clean(statusArg.slice("--status=".length)) : "";
 
 loadEnvConfig(process.cwd());
 
@@ -98,6 +100,72 @@ function joinAddress(reader, prefix) {
     reader.byHeader(`${prefix} (ZIP / Postal Code)`)
   ].filter(Boolean);
   return parts.join("\n");
+}
+
+const stateNameToCode = new Map(
+  [
+    ["Alabama", "AL"],
+    ["Alaska", "AK"],
+    ["Arizona", "AZ"],
+    ["Arkansas", "AR"],
+    ["California", "CA"],
+    ["Colorado", "CO"],
+    ["Connecticut", "CT"],
+    ["Delaware", "DE"],
+    ["District of Columbia", "DC"],
+    ["Florida", "FL"],
+    ["Georgia", "GA"],
+    ["Hawaii", "HI"],
+    ["Idaho", "ID"],
+    ["Illinois", "IL"],
+    ["Indiana", "IN"],
+    ["Iowa", "IA"],
+    ["Kansas", "KS"],
+    ["Kentucky", "KY"],
+    ["Louisiana", "LA"],
+    ["Maine", "ME"],
+    ["Maryland", "MD"],
+    ["Massachusetts", "MA"],
+    ["Michigan", "MI"],
+    ["Minnesota", "MN"],
+    ["Mississippi", "MS"],
+    ["Missouri", "MO"],
+    ["Montana", "MT"],
+    ["Nebraska", "NE"],
+    ["Nevada", "NV"],
+    ["New Hampshire", "NH"],
+    ["New Jersey", "NJ"],
+    ["New Mexico", "NM"],
+    ["New York", "NY"],
+    ["North Carolina", "NC"],
+    ["North Dakota", "ND"],
+    ["Ohio", "OH"],
+    ["Oklahoma", "OK"],
+    ["Oregon", "OR"],
+    ["Pennsylvania", "PA"],
+    ["Rhode Island", "RI"],
+    ["South Carolina", "SC"],
+    ["South Dakota", "SD"],
+    ["Tennessee", "TN"],
+    ["Texas", "TX"],
+    ["Utah", "UT"],
+    ["Vermont", "VT"],
+    ["Virginia", "VA"],
+    ["Washington", "WA"],
+    ["West Virginia", "WV"],
+    ["Wisconsin", "WI"],
+    ["Wyoming", "WY"]
+  ].flatMap(([name, code]) => [
+    [name.toLowerCase(), code],
+    [code.toLowerCase(), code]
+  ])
+);
+
+function normalizeState(value) {
+  const raw = clean(value);
+  if (!raw) return "";
+  const normalized = raw.replace(/\./g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  return stateNameToCode.get(normalized) || raw;
 }
 
 function normalizeDate(value) {
@@ -219,27 +287,8 @@ function makeFiles(reader) {
   const sources = [
     ["decree", "Signed divorce decree", "Please upload your PDF copy of the decree/order"],
     ["statement", "Retirement account statement", "Please upload a recent statement of the account we are dividing"],
-    ["other", "Appearance of Counsel Upload", "Appearance of Counsel Upload"],
     ["signed", "Certified QDRO", "Certified QDRO"],
-    ["other", "Approval Letter or Proof of Division", "Approval Letter or Proof of Division"],
-    ["signed", "Withdrawal of Counsel", "Withdrawal of Counsel"],
-    ["generated", "PDF: Appearance of Counsel", "PDF: Appearance of Counsel"],
-    ["generated", "PDF: URS", "PDF: URS"],
-    ["generated", "PDF: URS Addendum", "PDF: URS Addendum"],
-    ["generated", "PDF: Withdrawal of Counsel", "PDF: Withdrawal of Counsel"],
-    ["generated", "PDF: Empower", "PDF: Empower"],
-    ["generated", "PDF: URS Pension", "PDF: URS Pension"],
-    ["generated", "PDF: DMBA - 401k", "PDF: DMBA - 401k"],
-    ["generated", "PDF: DMBA - Pension", "PDF: DMBA - Pension"],
-    ["generated", "PDF: Multi Template", "PDF: Multi Template"],
-    ["generated", "PDF: Multi Template - ADP - 401k", "PDF: Multi Template - ADP - 401k"],
-    ["generated", "PDF: T.RowPrice IHC - 401k", "PDF: T.RowPrice IHC - 401k"],
-    ["generated", "PDF: Principal - 401k", "PDF: Principal - 401k"],
-    ["generated", "PDF: IHC - 401k", "PDF: IHC - 401k"],
-    ["generated", "PDF: IHC - Pension", "PDF: IHC - Pension"],
-    ["generated", "PDF: TSP", "PDF: TSP"],
-    ["generated", "PDF: TSP Addendum", "PDF: TSP Addendum"],
-    ["generated", "PDF: Fidelity", "PDF: Fidelity"]
+    ["other", "Approval Letter or Proof of Division", "Approval Letter or Proof of Division"]
   ];
 
   return sources.flatMap(([kind, label, header], index) => {
@@ -315,7 +364,7 @@ function buildFields(reader) {
     party1_address_street: reader.byHeader("Party 1 current mailing address (Street Address)"),
     party1_address_line2: reader.byHeader("Party 1 current mailing address (Address Line 2)"),
     party1_address_city: reader.byHeader("Party 1 current mailing address (City)"),
-    party1_address_state: reader.byHeader("Party 1 current mailing address (State)"),
+    party1_address_state: normalizeState(reader.byHeader("Party 1 current mailing address (State)")),
     party1_address_zip: reader.byHeader("Party 1 current mailing address (ZIP / Postal Code)"),
     party1_ssn: reader.byHeader("Party 1 SSN"),
     party1_dob: normalizeDate(reader.byHeader("Party 1 birth date")),
@@ -325,7 +374,7 @@ function buildFields(reader) {
     party2_address_street: reader.byHeader("Party 2 current mailing address (Street Address)"),
     party2_address_line2: reader.byHeader("Party 2 current mailing address (Address Line 2)"),
     party2_address_city: reader.byHeader("Party 2 current mailing address (City)"),
-    party2_address_state: reader.byHeader("Party 2 current mailing address (State)"),
+    party2_address_state: normalizeState(reader.byHeader("Party 2 current mailing address (State)")),
     party2_address_zip: reader.byHeader("Party 2 current mailing address (ZIP / Postal Code)"),
     party2_ssn: reader.byHeader("Party 2 SSN"),
     party2_dob: normalizeDate(reader.byHeader("Party 2 birth date")),
@@ -340,7 +389,7 @@ function buildFields(reader) {
     employer_address_street: reader.byHeader("Employer Address (Street Address)"),
     employer_address_line2: reader.byHeader("Employer Address (Address Line 2)"),
     employer_address_city: reader.byHeader("Employer Address (City)"),
-    employer_address_state: reader.byHeader("Employer Address (State / Province)"),
+    employer_address_state: normalizeState(reader.byHeader("Employer Address (State / Province)")),
     employer_address_zip: reader.byHeader("Employer Address (ZIP / Postal Code)"),
     employer_fax: reader.byHeader("Employer Fax"),
     employer_email: reader.byHeader("Employer Email"),
@@ -354,8 +403,7 @@ function buildFields(reader) {
     account_awardee: normalizeAwardee(reader.byHeader("Which party is being awarded some or all of this retirement account?")),
     market_adjustment: normalizeMarketAdjustment(reader.byHeader("Interest, Gains, and Losses")),
     client_signature: reader.byHeader("Please sign"),
-    total: reader.byHeader("Total") || reader.byHeader("Payment Amount"),
-    wordpress_status: reader.byHeader("Status")
+    total: reader.byHeader("Total") || reader.byHeader("Payment Amount")
   };
 }
 
@@ -457,13 +505,55 @@ async function existingIds(db, ids) {
   return existing;
 }
 
+async function existingRequestsById(db, ids) {
+  const existing = new Map();
+  for (let index = 0; index < ids.length; index += 30) {
+    const chunk = ids.slice(index, index + 30);
+    await Promise.all(
+      chunk.map(async (id) => {
+        const doc = await db.collection("requests").doc(id).get();
+        if (doc.exists) existing.set(id, doc.data());
+      })
+    );
+  }
+  return existing;
+}
+
+function preserveMigratedFiles(request, existingRequest) {
+  if (!existingRequest || !Array.isArray(existingRequest.files) || !Array.isArray(request.files)) return request;
+
+  const existingById = new Map(
+    existingRequest.files
+      .filter((file) => file && typeof file.id === "string")
+      .map((file) => [file.id, file])
+  );
+
+  return {
+    ...request,
+    files: request.files.map((file) => {
+      const existingFile = existingById.get(file.id);
+      if (!existingFile?.storagePath) return file;
+      const { url, ...withoutUrl } = file;
+      return {
+        ...withoutUrl,
+        fileName: existingFile.fileName || file.fileName,
+        storagePath: existingFile.storagePath
+      };
+    })
+  };
+}
+
 async function main() {
   const text = fs.readFileSync(inputPath, "utf8").replace(/^\uFEFF/, "");
   const rows = parseCsv(text);
   if (rows.length < 2) throw new Error("CSV has no data rows.");
 
   const headers = rows[0].map(normalizeHeader);
-  const sourceRows = limit > 0 ? rows.slice(1, 1 + limit) : rows.slice(1);
+  const allSourceRows = rows.slice(1);
+  const filteredRows = statusFilter
+    ? allSourceRows.filter((row) => makeReader(headers, row).byHeader("Status") === statusFilter)
+    : allSourceRows;
+  const sourceRows = limit > 0 ? filteredRows.slice(0, limit) : filteredRows;
   const requests = sourceRows.map((row) => buildRequest(headers, row));
   const duplicateIds = requests
     .map((request) => request.id)
@@ -472,6 +562,7 @@ async function main() {
   console.log(`mode=${write ? "write" : "dry-run"}`);
   console.log(`replaceExisting=${replaceExisting ? "yes" : "no"}`);
   console.log(`input=${inputPath}`);
+  console.log(`statusFilter=${statusFilter || "none"}`);
   console.log(`limit=${limit > 0 ? limit : "none"}`);
   console.log(`rows=${requests.length}`);
   console.log(`uniqueIds=${new Set(requests.map((request) => request.id)).size}`);
@@ -499,21 +590,26 @@ async function main() {
   }
 
   const db = getFirestore();
-  const existing = await existingIds(db, requests.map((request) => request.id));
+  const existingRequestMap = await existingRequestsById(db, requests.map((request) => request.id));
+  const existing = new Set(existingRequestMap.keys());
   if (existing.size && !replaceExisting) {
     throw new Error(`${existing.size} request ids already exist. Import aborted without overwriting.`);
   }
 
-  for (let index = 0; index < requests.length; index += 400) {
+  const requestsToWrite = replaceExisting
+    ? requests.map((request) => preserveMigratedFiles(request, existingRequestMap.get(request.id)))
+    : requests;
+
+  for (let index = 0; index < requestsToWrite.length; index += 400) {
     const batch = db.batch();
-    for (const request of requests.slice(index, index + 400)) {
+    for (const request of requestsToWrite.slice(index, index + 400)) {
       batch.set(db.collection("requests").doc(request.id), request, { merge: false });
     }
     await batch.commit();
-    console.log(`committed=${Math.min(index + 400, requests.length)}/${requests.length}`);
+    console.log(`committed=${Math.min(index + 400, requestsToWrite.length)}/${requestsToWrite.length}`);
   }
 
-  console.log(`imported=${requests.length}`);
+  console.log(`imported=${requestsToWrite.length}`);
   console.log(`projectId=${projectId}`);
 }
 

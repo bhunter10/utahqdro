@@ -47,7 +47,7 @@ export async function DELETE(req: Request) {
     const requestRef = db.collection("requests").doc(requestId);
     const snapshot = await requestRef.get();
     if (!snapshot.exists) {
-      return NextResponse.json({ message: "Request not found.", requests: [] }, { status: 404 });
+      return NextResponse.json({ message: "Request deleted.", requests: [] });
     }
 
     const request = normalizeRequest(snapshot.id, snapshot.data() || {});
@@ -63,7 +63,7 @@ export async function DELETE(req: Request) {
 
     await requestRef.delete();
 
-    return NextResponse.json({ message: "Request and uploaded files deleted.", requests: [] });
+    return NextResponse.json({ message: "Request deleted.", requests: [] });
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : "Could not delete request.", requests: [] },

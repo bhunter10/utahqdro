@@ -21,7 +21,7 @@ import {
   type AiFieldConfidence,
   type AiUploadedFile
 } from "@/lib/ai-intake";
-import { formatLongDate, formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
+import { formatFieldOptionLabel, formatLongDate, formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
 import { auth, db, hasFirebaseConfig, missingFirebaseConfig } from "@/lib/firebase";
 import type { IntakeField } from "@/lib/types";
 import { findUtahCourt } from "@/lib/utah-courts";
@@ -441,7 +441,7 @@ export function AiIntakeWizard() {
     }
 
     setStage("submitted");
-    alert(payload.message || "Payment route is ready. Add Stripe credentials to enable live checkout.");
+    alert(payload.message || "Payment route is ready. Add Square credentials to enable live checkout.");
   }
 
   function continueFromMissingQuestions() {
@@ -773,7 +773,6 @@ function UploadStep({
       <div className="ai-upload-grid">
         <UploadBox label="Signed divorce decree" kind="decree" onFilesSelected={onFilesSelected} />
         <UploadBox label="Retirement account statement" kind="statement" onFilesSelected={onFilesSelected} />
-        <UploadBox label="Additional documents" kind="other" onFilesSelected={onFilesSelected} multiple />
       </div>
       {files.length > 0 && (
         <div className="ai-file-list">
@@ -1241,7 +1240,7 @@ function AiFieldControl({
           {field.options?.map((option) => (
             <label className="choice" key={option}>
               <input type="radio" name={field.id} checked={value === option} onChange={() => onChange(option)} />
-              <span>{option}</span>
+              <span>{formatFieldOptionLabel(field.id, option)}</span>
             </label>
           ))}
         </div>
@@ -1257,7 +1256,7 @@ function AiFieldControl({
           <option value="">Choose one</option>
           {field.options?.map((option) => (
             <option value={option} key={option}>
-              {option}
+              {formatFieldOptionLabel(field.id, option)}
             </option>
           ))}
         </select>

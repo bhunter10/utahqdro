@@ -9,11 +9,11 @@ import {
   type User
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { getRequesterIdentity, getRequesterRoleHint } from "@/lib/ai-intake";
+import { getRequesterIdentity, getRequesterRoleHint, type AiUploadedFile } from "@/lib/ai-intake";
 import { demoRequest, intakeSteps, qdroConsentText } from "@/lib/content";
-import { formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
+import { formatFieldOptionLabel, formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
 import { auth, db, hasFirebaseConfig } from "@/lib/firebase";
-import type { IntakeField, QdroRequest } from "@/lib/types";
+import type { IntakeField, QdroRequest, RequestFile } from "@/lib/types";
 import { findUtahCourt } from "@/lib/utah-courts";
 import { SignaturePad } from "./SignaturePad";
 
@@ -69,6 +69,8 @@ export function IntakeWizard() {
   const [isAccountSubmitting, setIsAccountSubmitting] = useState(false);
   const [authReady, setAuthReady] = useState(!auth);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<Record<string, File>>({});
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
 
   useEffect(() => {
     if (!auth) {
@@ -88,6 +90,7 @@ export function IntakeWizard() {
         setData({});
         setSavedAt("");
         setSubmitted(false);
+        setPendingFiles({});
         setAccountEmail("");
         setDraftRestored(false);
       }
@@ -195,53 +198,79 @@ export function IntakeWizard() {
     });
   }
 
+  function updateFileField(id: string, file: File | null) {
+    setPendingFiles((current) => {
+      const next = { ...current };
+      if (file) next[id] = file;
+      else delete next[id];
+      return next;
+    });
+    updateField(id, file?.name || "");
+  }
+
   async function beginCheckout() {
-    if (!clientUser || !db) {
+    if (!clientUser || !auth?.currentUser || !db) {
       alert("Sign in before continuing to payment.");
       return;
     }
 
-    const now = new Date().toISOString();
-    const requestId = `QDRO-${Date.now()}`;
-    const requester = getRequesterIdentity(data, clientUser.email || "");
-    const requestToSave: QdroRequest = {
-      id: requestId,
-      ownerUid: clientUser.uid,
-      clientName: requester.name,
-      clientEmail: requester.email,
-      status: "1.1 Pmt Req to Party1",
-      paymentState: "pending",
-      signatureState: "not_started",
-      templateFamily: String(data.plan_family || "Other"),
-      fields: data,
-      files: [],
-      notes: [
-        {
-          id: `client-note-${Date.now()}`,
-          author: "Client intake",
-          visibility: "internal",
-          body: "Submitted through /qdro-request and sent to payment.",
-          createdAt: now
-        }
-      ],
-      createdAt: now,
-      updatedAt: now
-    };
-
-    await setDoc(doc(db, "requests", requestId), requestToSave);
-
-    const response = await fetch("/api/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requestId })
-    });
-    const payload = (await response.json()) as { url?: string; message?: string };
-    setSubmitted(true);
-    if (payload.url) {
-      window.location.href = payload.url;
+    const requiredFileFields = intakeSteps.flatMap((step) => step.fields).filter((field) => field.type === "file" && field.required);
+    const missingSelectedFiles = requiredFileFields.filter((field) => !pendingFiles[field.id]);
+    if (missingSelectedFiles.length > 0) {
+      alert(`Please select ${missingSelectedFiles.map((field) => field.label.toLowerCase()).join(" and ")} before continuing.`);
+      setActiveStep(0);
       return;
     }
-    alert(payload.message || "Payment route is ready. Add Stripe credentials to enable live checkout.");
+
+    try {
+      setIsSubmittingRequest(true);
+      const now = new Date().toISOString();
+      const requestId = `QDRO-${Date.now()}`;
+      const files = await uploadRequestFiles(requestId, pendingFiles);
+      const requester = getRequesterIdentity(data, clientUser.email || "");
+      const requestToSave: QdroRequest = {
+        id: requestId,
+        ownerUid: clientUser.uid,
+        clientName: requester.name,
+        clientEmail: requester.email,
+        status: "1.1 Pmt Req to Party1",
+        paymentState: "pending",
+        signatureState: "not_started",
+        templateFamily: String(data.plan_family || "Other"),
+        fields: data,
+        files,
+        notes: [
+          {
+            id: `client-note-${Date.now()}`,
+            author: "Client intake",
+            visibility: "internal",
+            body: "Submitted through /qdro-request and sent to payment.",
+            createdAt: now
+          }
+        ],
+        createdAt: now,
+        updatedAt: now
+      };
+
+      await setDoc(doc(db, "requests", requestId), requestToSave);
+
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId })
+      });
+      const payload = (await response.json()) as { url?: string; message?: string };
+      setSubmitted(true);
+      if (payload.url) {
+        window.location.href = payload.url;
+        return;
+      }
+      alert(payload.message || "Payment route is ready. Add Square credentials to enable live checkout.");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not save the request. Please try again.");
+    } finally {
+      setIsSubmittingRequest(false);
+    }
   }
 
   async function handleAccountSubmit() {
@@ -283,6 +312,7 @@ export function IntakeWizard() {
     setActiveStep(-2);
     setReady({});
     setData(nextData);
+    setPendingFiles({});
     setSavedAt("");
   }
 
@@ -398,6 +428,7 @@ export function IntakeWizard() {
             step={intakeSteps[activeStep]}
             data={data}
             updateField={updateField}
+            updateFileField={updateFileField}
             onBack={() => setActiveStep((step) => Math.max(0, step - 1))}
             onNext={() => setActiveStep((step) => Math.min(intakeSteps.length, step + 1))}
           />
@@ -413,7 +444,7 @@ export function IntakeWizard() {
               <div className="grid three" style={{ marginTop: 18 }}>
                 <article className="card">
                   <h3>Payment</h3>
-                  <p>$550 flat fee per QDRO. Stripe Checkout is used when credentials are configured.</p>
+                  <p>$550 flat fee per QDRO. Square Checkout is used when credentials are configured.</p>
                 </article>
                 <article className="card">
                   <h3>Client signature</h3>
@@ -450,9 +481,9 @@ export function IntakeWizard() {
                   className="button primary"
                   type="button"
                   onClick={beginCheckout}
-                  disabled={!data.client_signature || data.engagement_terms_agreed !== true}
+                  disabled={isSubmittingRequest || !data.client_signature || data.engagement_terms_agreed !== true}
                 >
-                  Continue to payment
+                  {isSubmittingRequest ? "Saving request..." : "Continue to payment"}
                 </button>
               </div>
               {(!data.client_signature || data.engagement_terms_agreed !== true) && <p>Please agree to the terms and sign before continuing to payment.</p>}
@@ -467,6 +498,49 @@ export function IntakeWizard() {
       </div>
     </div>
   );
+}
+
+async function uploadRequestFiles(requestId: string, pendingFiles: Record<string, File>) {
+  if (!auth?.currentUser) throw new Error("Sign in before uploading documents.");
+
+  const uploads: AiUploadedFile[] = [];
+  const fileEntries = [
+    { fieldId: "signed_decree", kind: "decree" },
+    { fieldId: "account_statement", kind: "statement" }
+  ] as const;
+
+  for (const entry of fileEntries) {
+    const file = pendingFiles[entry.fieldId];
+    if (!file) continue;
+
+    const formData = new FormData();
+    formData.append("requestId", requestId);
+    formData.append("kind", entry.kind);
+    formData.append("files", file);
+
+    const token = await auth.currentUser.getIdToken();
+    const response = await fetch("/api/ai-intake/upload", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData
+    });
+    const result = (await response.json()) as { message?: string; files?: AiUploadedFile[] };
+    if (!response.ok || !result.files) {
+      throw new Error(result.message || "Could not upload the selected documents.");
+    }
+
+    uploads.push(...result.files);
+  }
+
+  return uploads.map<RequestFile>((file, index) => ({
+    id: file.id || `file-${index + 1}`,
+    label: file.kind === "decree" ? "Signed divorce decree" : "Retirement account statement",
+    kind: file.kind === "decree" ? "decree" : "statement",
+    fileName: file.name,
+    status: "uploaded",
+    url: file.url,
+    storagePath: file.storagePath
+  }));
 }
 
 function IraReadinessGate({
@@ -654,12 +728,14 @@ function WizardStep({
   step,
   data,
   updateField,
+  updateFileField,
   onBack,
   onNext
 }: {
   step: (typeof intakeSteps)[number];
   data: WizardData;
   updateField: (id: string, value: string | boolean) => void;
+  updateFileField: (id: string, file: File | null) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -674,7 +750,14 @@ function WizardStep({
               ) : (
                 <div className="field-grid">
                   {visibleFields.map((field) => (
-                    <FieldControl key={field.id} data={data} field={field} value={data[field.id]} onChange={(value) => updateField(field.id, value)} />
+                    <FieldControl
+                      key={field.id}
+                      data={data}
+                      field={field}
+                      value={data[field.id]}
+                      onChange={(value) => updateField(field.id, value)}
+                      onFileChange={(file) => updateFileField(field.id, file)}
+                    />
                   ))}
                 </div>
               )}
@@ -753,12 +836,14 @@ function FieldControl({
   data,
   field,
   value,
-  onChange
+  onChange,
+  onFileChange
 }: {
   data: WizardData;
   field: IntakeField;
   value: string | boolean | undefined;
   onChange: (value: string | boolean) => void;
+  onFileChange?: (file: File | null) => void;
 }) {
   const inputId = `field-${field.id}`;
   const isSsnField = isSsnFieldId(field.id);
@@ -785,7 +870,7 @@ function FieldControl({
           {field.options?.map((option) => (
             <label className="choice" key={option}>
               <input type="radio" name={field.id} checked={value === option} onChange={() => onChange(option)} />
-              <span>{option}</span>
+              <span>{formatFieldOptionLabel(field.id, option)}</span>
             </label>
           ))}
         </div>
@@ -803,7 +888,7 @@ function FieldControl({
           <option value="">Choose one</option>
           {field.options?.map((option) => (
             <option value={option} key={option}>
-              {option}
+              {formatFieldOptionLabel(field.id, option)}
             </option>
           ))}
         </select>
@@ -833,7 +918,11 @@ function FieldControl({
           id={inputId}
           type="file"
           accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-          onChange={(event) => onChange(event.target.files?.[0]?.name || "")}
+          onChange={(event) => {
+            const file = event.target.files?.[0] || null;
+            if (onFileChange) onFileChange(file);
+            else onChange(file?.name || "");
+          }}
         />
         {value && <small>Selected: {String(value)}</small>}
       </div>

@@ -1495,6 +1495,45 @@ th {
   margin: 8px 0 0;
 }
 
+.admin-upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.compact-upload-field {
+  min-width: min(100%, 280px);
+}
+
+.admin-upload-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-upload-button input {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.file-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.danger-link {
+  color: #b42318;
+}
+
+.danger-link:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .modal-save-footer {
   position: sticky;
   bottom: 0;
@@ -1510,8 +1549,14 @@ th {
   backdrop-filter: blur(14px);
 }
 
-.internal-notes-textarea {
-  min-height: 150px;
+.internal-notes-editor {
+  gap: 8px;
+}
+
+.internal-notes-html-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  pointer-events: none;
 }
 
 .admin-signature-preview {
@@ -1708,6 +1753,32 @@ th {
   font-size: 16px;
   line-height: 1.65;
   outline: none;
+}
+
+.template-body-editor.internal-notes-html-editor {
+  height: 96px;
+  min-height: 80px;
+  max-height: 360px;
+  overflow: auto;
+  padding: 14px 16px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  white-space: pre-wrap;
+}
+
+.template-body-editor.internal-notes-html-editor div {
+  margin: 0 0 8px;
+}
+
+.template-body-editor.internal-notes-html-editor div:empty {
+  min-height: 1em;
+}
+
+.template-body-editor.internal-notes-html-editor strong,
+.template-body-editor.internal-notes-html-editor b {
+  font-weight: 700;
 }
 
 .template-body-editor * {
