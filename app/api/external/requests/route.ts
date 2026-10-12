@@ -38,6 +38,12 @@ const blockedFieldPatterns = [
   /total/i
 ];
 
+const ownerBlockedFieldPatterns = [
+  /(^|_)ssn$/i,
+  /(^|_)dob$/i,
+  /birth/i
+];
+
 export async function GET(req: Request) {
   const authResult = authorizeExternalRequest(req);
   if (!authResult.ok) return authResult.response;
@@ -148,7 +154,7 @@ function toOwnerExternalRequest(request: QdroRequest) {
     templateFamily: request.templateFamily,
     createdAt: request.createdAt,
     updatedAt: request.updatedAt,
-    fields: request.fields,
+    fields: filterOwnerFields(request.fields),
     files: request.files,
     notes: request.notes
   };
@@ -193,6 +199,12 @@ function getAllowedFields() {
 
 function isBlockedField(field: string) {
   return blockedFieldPatterns.some((pattern) => pattern.test(field));
+}
+
+function filterOwnerFields(fields: QdroRequest["fields"]) {
+  return Object.fromEntries(
+    Object.entries(fields).filter(([key]) => !ownerBlockedFieldPatterns.some((pattern) => pattern.test(key)))
+  );
 }
 
 function summarizeFiles(files: RequestFile[]) {
