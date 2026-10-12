@@ -14,10 +14,11 @@ function getSquareApiBaseUrl() {
 }
 
 export async function POST(req: Request) {
-  const { requestId, cancelPath } = (await req.json()) as { requestId?: string; cancelPath?: string };
+  const { requestId, cancelPath, amountCents } = (await req.json()) as { requestId?: string; cancelPath?: string; amountCents?: number };
   const accessToken = process.env.SQUARE_ACCESS_TOKEN;
   const locationId = process.env.SQUARE_LOCATION_ID;
-  const priceCents = Number(process.env.SQUARE_QDRO_PRICE_CENTS || "55000");
+  const requestedPriceCents = typeof amountCents === "number" && [27500, 55000].includes(amountCents) ? amountCents : undefined;
+  const priceCents = requestedPriceCents || Number(process.env.SQUARE_QDRO_PRICE_CENTS || "55000");
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const safeCancelPath = cancelPath?.startsWith("/") && !cancelPath.startsWith("//") ? cancelPath : "/qdro-request";
   const safeRequestId = requestId || "draft";
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
       idempotency_key: `${safeRequestId}-${Date.now()}`,
       description: `UtahQDRO request ${safeRequestId}`,
       quick_pay: {
-        name: "UtahQDRO flat fee",
+        name: priceCents === 27500 ? "UtahQDRO half payment" : "UtahQDRO flat fee",
         price_money: {
           amount: Number.isFinite(priceCents) ? priceCents : 55000,
           currency: "USD"

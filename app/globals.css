@@ -622,6 +622,10 @@ p {
   margin-top: 22px;
 }
 
+.field-grid .full-width {
+  grid-column: 1 / -1;
+}
+
 .field-grid.one {
   grid-template-columns: 1fr;
 }

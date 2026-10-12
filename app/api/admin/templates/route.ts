@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { isAdminUser } from "@/lib/admin-access";
+import { requireAdminRequest } from "@/lib/admin-api";
 import { documentTemplates } from "@/lib/content";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { getAdminDb } from "@/lib/firebase-admin";
 import type { DocumentTemplate } from "@/lib/types";
 
 const collectionName = "documentTemplates";
@@ -98,52 +98,8 @@ async function requireAdmin(req: Request): Promise<
   | { ok: true; uid: string }
   | { ok: false; response: NextResponse<{ message: string }> }
 > {
-  const auth = getAdminAuth();
-  const db = getAdminDb();
-  if (!auth || !db) {
-    return {
-      ok: false,
-      response: NextResponse.json({ message: "Firebase Admin is not configured." }, { status: 503 })
-    };
-  }
-
-  const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!token) {
-    return {
-      ok: false,
-      response: NextResponse.json({ message: "Admin sign-in is required." }, { status: 401 })
-    };
-  }
-
-  let decoded;
-  try {
-    decoded = await auth.verifyIdToken(token);
-  } catch (error) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { message: getErrorMessage(error, "Admin sign-in is invalid or expired.") },
-        { status: 401 }
-      )
-    };
-  }
-
-  try {
-    if (await isAdminUser(decoded, db)) return { ok: true, uid: decoded.uid };
-  } catch (error) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { message: getErrorMessage(error, "Could not check the admin user profile.") },
-        { status: 500 }
-      )
-    };
-  }
-
-  return {
-    ok: false,
-    response: NextResponse.json({ message: "Admin access is required." }, { status: 403 })
-  };
+  const authResult = await requireAdminRequest(req);
+  return authResult.ok ? { ok: true, uid: authResult.uid } : authResult;
 }
 
 function normalizeTemplate(id: string, data: FirebaseFirestore.DocumentData): DocumentTemplate {

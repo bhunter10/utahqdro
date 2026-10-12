@@ -374,7 +374,7 @@ export const intakeSteps: IntakeStep[] = [
   {
     id: "division",
     title: "Division terms",
-    description: "Use the exact terms from the divorce decree. If it is unclear, mark it for admin review.",
+    description: "Use the exact terms from the divorce decree.",
     fields: [
       {
         id: "division_type",

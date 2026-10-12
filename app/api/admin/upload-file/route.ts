@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
-import { isAdminUser } from "@/lib/admin-access";
-import { getAdminAuth, getAdminDb, getAdminStorageBucket } from "@/lib/firebase-admin";
+import { requireAdminRequest } from "@/lib/admin-api";
+import { getAdminStorageBucket } from "@/lib/firebase-admin";
 import type { QdroRequest, RequestFile } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -25,21 +25,12 @@ type UploadType = keyof typeof uploadLabels;
 
 export async function POST(req: Request) {
   try {
-    const auth = getAdminAuth();
-    const db = getAdminDb();
+    const authResult = await requireAdminRequest(req, "Firebase Admin Storage is not configured.");
+    if (!authResult.ok) return authResult.response;
+
     const bucket = getAdminStorageBucket();
-    if (!auth || !db || !bucket) {
+    if (!bucket) {
       return NextResponse.json({ message: "Firebase Admin Storage is not configured." }, { status: 503 });
-    }
-
-    const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-    if (!token) {
-      return NextResponse.json({ message: "Admin sign-in is required." }, { status: 401 });
-    }
-
-    const decoded = await auth.verifyIdToken(token);
-    if (!(await isAdminUser(decoded, db))) {
-      return NextResponse.json({ message: "Admin access is required." }, { status: 403 });
     }
 
     const formData = await req.formData();
@@ -51,7 +42,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "requestId, uploadType, and files are required." }, { status: 400 });
     }
 
-    const requestRef = db.collection("requests").doc(requestId);
+    const requestRef = authResult.db.collection("requests").doc(requestId);
     const snapshot = await requestRef.get();
     if (!snapshot.exists) {
       return NextResponse.json({ message: "Request not found." }, { status: 404 });
@@ -80,7 +71,7 @@ export async function POST(req: Request) {
         resumable: false,
         metadata: {
           metadata: {
-            uploadedBy: decoded.uid,
+            uploadedBy: authResult.uid,
             requestId,
             uploadType
           }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { isAdminUser } from "@/lib/admin-access";
+import { requireAdminRequest } from "@/lib/admin-api";
 import { getRequesterIdentity } from "@/lib/ai-intake";
-import { getAdminAuth, getAdminDb, getAdminStorageBucket } from "@/lib/firebase-admin";
+import { getAdminDb, getAdminStorageBucket } from "@/lib/firebase-admin";
 import { requestStatuses, type QdroRequest, type RequestStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -132,29 +132,13 @@ async function requireAdmin(req: Request): Promise<
   | { ok: true; uid: string }
   | { ok: false; response: NextResponse<{ message: string; requests?: QdroRequest[] }> }
 > {
-  const auth = getAdminAuth();
-  const db = getAdminDb();
-  if (!auth || !db) {
-    return {
-      ok: false,
-      response: NextResponse.json({ message: "Firebase Admin is not configured.", requests: [] }, { status: 503 })
-    };
-  }
+  const authResult = await requireAdminRequest(req, "Firebase Admin is not configured.");
+  if (authResult.ok) return { ok: true, uid: authResult.uid };
 
-  const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!token) {
-    return {
-      ok: false,
-      response: NextResponse.json({ message: "Admin sign-in is required.", requests: [] }, { status: 401 })
-    };
-  }
-
-  const decoded = await auth.verifyIdToken(token);
-  if (await isAdminUser(decoded, db)) return { ok: true, uid: decoded.uid };
-
+  const body = await authResult.response.json();
   return {
     ok: false,
-    response: NextResponse.json({ message: "Admin access is required.", requests: [] }, { status: 403 })
+    response: NextResponse.json({ ...body, requests: [] }, { status: authResult.response.status })
   };
 }
 

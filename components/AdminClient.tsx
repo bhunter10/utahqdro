@@ -144,7 +144,7 @@ export function AdminClient() {
   async function getAdminToken() {
     const user = auth?.currentUser;
     if (!user) return "";
-    return user.getIdToken();
+    return user.getIdToken(true);
   }
 
   async function loadTemplates() {

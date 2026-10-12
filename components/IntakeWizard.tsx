@@ -54,6 +54,61 @@ const iraBlocker =
 type WizardData = Record<string, string | boolean>;
 
 const storageKey = "utah-qdro-intake";
+const FULL_PAYMENT_CENTS = 55000;
+const HALF_PAYMENT_CENTS = 27500;
+const billingStateOptions = [
+  "AL",
+  "AK",
+  "AZ",
+  "AR",
+  "CA",
+  "CO",
+  "CT",
+  "DE",
+  "DC",
+  "FL",
+  "GA",
+  "HI",
+  "ID",
+  "IL",
+  "IN",
+  "IA",
+  "KS",
+  "KY",
+  "LA",
+  "ME",
+  "MD",
+  "MA",
+  "MI",
+  "MN",
+  "MS",
+  "MO",
+  "MT",
+  "NE",
+  "NV",
+  "NH",
+  "NJ",
+  "NM",
+  "NY",
+  "NC",
+  "ND",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VT",
+  "VA",
+  "WA",
+  "WV",
+  "WI",
+  "WY"
+];
 
 export function IntakeWizard() {
   const [activeStep, setActiveStep] = useState(-2);
@@ -181,6 +236,21 @@ export function IntakeWizard() {
       fields
     };
   }, [clientUser?.email, data, submitted]);
+  const paymentAmountCents = data.payment_option === "split" ? HALF_PAYMENT_CENTS : FULL_PAYMENT_CENTS;
+  const billingComplete =
+    typeof data.billing_name === "string" &&
+    data.billing_name.trim() !== "" &&
+    typeof data.billing_address_street === "string" &&
+    data.billing_address_street.trim() !== "" &&
+    typeof data.billing_address_city === "string" &&
+    data.billing_address_city.trim() !== "" &&
+    typeof data.billing_address_state === "string" &&
+    data.billing_address_state.trim() !== "" &&
+    typeof data.billing_address_zip === "string" &&
+    data.billing_address_zip.trim() !== "" &&
+    typeof data.billing_email === "string" &&
+    data.billing_email.trim() !== "" &&
+    (data.payment_option === "full" || data.payment_option === "split");
 
   function updateField(id: string, value: string | boolean) {
     setData((current) => {
@@ -257,7 +327,7 @@ export function IntakeWizard() {
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId })
+        body: JSON.stringify({ requestId, amountCents: paymentAmountCents })
       });
       const payload = (await response.json()) as { url?: string; message?: string };
       setSubmitted(true);
@@ -436,27 +506,121 @@ export function IntakeWizard() {
           <>
             <section className="panel">
               <span className="status info">Review</span>
-              <p>
-                Confirm the intake is ready, sign the request authorization, and
-                continue to payment. The generated PDF preview is reviewed in the
-                admin portal before final processing.
-              </p>
-              <div className="grid three" style={{ marginTop: 18 }}>
-                <article className="card">
-                  <h3>Payment</h3>
-                  <p>$550 flat fee per QDRO. Square Checkout is used when credentials are configured.</p>
-                </article>
-                <article className="card">
-                  <h3>Client signature</h3>
-                  <p>Sign this request directly on the page without needing DocuSign.</p>
-                </article>
-                <article className="card">
-                  <h3>Status</h3>
-                  <p>Clients can return to the portal to see notes, files, and progress.</p>
-                </article>
+              <div className="field-grid" style={{ marginTop: 18 }}>
+                <div className="field">
+                  <label htmlFor="field-billing_name">Billing full name</label>
+                  <input
+                    className="input"
+                    id="field-billing_name"
+                    name="billing_name"
+                    type="text"
+                    value={typeof data.billing_name === "string" ? data.billing_name : ""}
+                    onChange={(event) => updateField("billing_name", event.target.value)}
+                  />
+                </div>
+                <div className="field full-width">
+                  <label htmlFor="field-billing_email">Billing email</label>
+                  <small>Receipt will be sent to this email.</small>
+                  <input
+                    className="input"
+                    id="field-billing_email"
+                    name="billing_email"
+                    type="email"
+                    value={typeof data.billing_email === "string" ? data.billing_email : ""}
+                    onChange={(event) => updateField("billing_email", event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="field-billing_address_street">Billing street address</label>
+                  <input
+                    className="input"
+                    id="field-billing_address_street"
+                    name="billing_address_street"
+                    type="text"
+                    value={typeof data.billing_address_street === "string" ? data.billing_address_street : ""}
+                    onChange={(event) => updateField("billing_address_street", event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="field-billing_address_line2">Billing address line 2</label>
+                  <input
+                    className="input"
+                    id="field-billing_address_line2"
+                    name="billing_address_line2"
+                    type="text"
+                    value={typeof data.billing_address_line2 === "string" ? data.billing_address_line2 : ""}
+                    onChange={(event) => updateField("billing_address_line2", event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="field-billing_address_city">Billing city</label>
+                  <input
+                    className="input"
+                    id="field-billing_address_city"
+                    name="billing_address_city"
+                    type="text"
+                    value={typeof data.billing_address_city === "string" ? data.billing_address_city : ""}
+                    onChange={(event) => updateField("billing_address_city", event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="field-billing_address_state">Billing state</label>
+                  <select
+                    className="select"
+                    id="field-billing_address_state"
+                    name="billing_address_state"
+                    value={typeof data.billing_address_state === "string" ? data.billing_address_state : ""}
+                    onChange={(event) => updateField("billing_address_state", event.target.value)}
+                  >
+                    <option value="">Choose one</option>
+                    {billingStateOptions.map((state) => (
+                      <option value={state} key={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="field-billing_address_zip">Billing zip code</label>
+                  <input
+                    className="input"
+                    id="field-billing_address_zip"
+                    name="billing_address_zip"
+                    type="text"
+                    value={typeof data.billing_address_zip === "string" ? data.billing_address_zip : ""}
+                    onChange={(event) => updateField("billing_address_zip", event.target.value)}
+                  />
+                </div>
               </div>
+              <fieldset className="field full-field radio-field" style={{ marginTop: 22 }}>
+                <legend>Payment options</legend>
+                <label className="choice">
+                  <input
+                    type="radio"
+                    name="payment_option"
+                    checked={data.payment_option === "full"}
+                    onChange={() => updateField("payment_option", "full")}
+                  />
+                  <span>I am paying in full myself ($550)</span>
+                </label>
+                <label className="choice">
+                  <input
+                    type="radio"
+                    name="payment_option"
+                    checked={data.payment_option === "split"}
+                    onChange={() => updateField("payment_option", "split")}
+                  />
+                  <span>I am paying half and the other party is paying half ($275)</span>
+                </label>
+                {data.payment_option === "split" && (
+                  <small>
+                    When using this option, you will pay your half and a payment request will be sent to the other party for payment. No
+                    work will be done on this option until both have paid.
+                  </small>
+                )}
+              </fieldset>
               <div className="field" style={{ marginTop: 22 }}>
-                <label>Client signature</label>
+                <label>Engagement terms</label>
                 <div className="consent-copy">
                   <p>{qdroConsentText}</p>
                 </div>
@@ -468,6 +632,9 @@ export function IntakeWizard() {
                   />
                   <span>I agree to the engagement terms stated above.</span>
                 </label>
+              </div>
+              <div className="field" style={{ marginTop: 22 }}>
+                <label>Client signature</label>
                 <SignaturePad
                   value={typeof data.client_signature === "string" ? data.client_signature : ""}
                   onChange={(signature) => updateField("client_signature", signature)}
@@ -481,11 +648,12 @@ export function IntakeWizard() {
                   className="button primary"
                   type="button"
                   onClick={beginCheckout}
-                  disabled={isSubmittingRequest || !data.client_signature || data.engagement_terms_agreed !== true}
+                  disabled={isSubmittingRequest || !billingComplete || !data.client_signature || data.engagement_terms_agreed !== true}
                 >
                   {isSubmittingRequest ? "Saving request..." : "Continue to payment"}
                 </button>
               </div>
+              {!billingComplete && <p>Please complete the billing information and choose a payment option before continuing to payment.</p>}
               {(!data.client_signature || data.engagement_terms_agreed !== true) && <p>Please agree to the terms and sign before continuing to payment.</p>}
               {submitted && (
                 <p>

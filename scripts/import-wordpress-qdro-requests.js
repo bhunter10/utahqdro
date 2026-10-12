@@ -231,9 +231,9 @@ function normalizeAccountType(value, tspValue) {
 }
 
 function normalizePlanFamily(reader) {
+  const financialEntity = getFinancialEntityName(reader);
   const values = [
-    reader.byHeader("Name of financial entity who holds the funds"),
-    reader.byHeader("Financial Entity Name"),
+    financialEntity,
     reader.byHeader("What is the formal name of the plan we are dividing?")
   ].join(" ").toLowerCase();
 
@@ -252,7 +252,13 @@ function normalizePlanFamily(reader) {
     "IHC"
   ];
 
-  return families.find((family) => values.includes(family.toLowerCase())) || reader.byHeader("Name of financial entity who holds the funds") || "Other";
+  return families.find((family) => values.includes(family.toLowerCase())) || financialEntity || "Other";
+}
+
+function getFinancialEntityName(reader) {
+  const selectedEntity = reader.byHeader("Name of financial entity who holds the funds");
+  const typedEntity = reader.byHeader("Financial Entity Name");
+  return selectedEntity.toLowerCase() === "other" ? typedEntity || selectedEntity : selectedEntity || typedEntity;
 }
 
 function normalizeOwner(value) {
@@ -290,8 +296,27 @@ function makeFiles(reader) {
     ["signed", "Certified QDRO", "Certified QDRO"],
     ["other", "Approval Letter or Proof of Division", "Approval Letter or Proof of Division"]
   ];
+  const generatedSources = [
+    ["appearance-of-counsel", "Appearance of Counsel", "PDF: Appearance of Counsel"],
+    ["urs", "URS QDRO", "PDF: URS"],
+    ["urs-addendum", "URS Addendum", "PDF: URS Addendum"],
+    ["withdrawal-of-counsel", "Withdrawal of Counsel", "PDF: Withdrawal of Counsel"],
+    ["empower", "Empower QDRO", "PDF: Empower"],
+    ["urs-pension", "URS Pension QDRO", "PDF: URS Pension"],
+    ["dmba-401k", "DMBA 401k QDRO", "PDF: DMBA - 401k"],
+    ["dmba-pension", "DMBA Pension QDRO", "PDF: DMBA - Pension"],
+    ["multi-template", "Multi Template QDRO", "PDF: Multi Template"],
+    ["multi-template-adp-401k", "Multi Template ADP 401k QDRO", "PDF: Multi Template - ADP - 401k"],
+    ["troweprice-ihc-401k", "T.RowePrice IHC 401k QDRO", "PDF: T.RowPrice IHC - 401k"],
+    ["principal-401k", "Principal 401k QDRO", "PDF: Principal - 401k"],
+    ["ihc-401k", "IHC 401k QDRO", "PDF: IHC - 401k"],
+    ["ihc-pension", "IHC Pension QDRO", "PDF: IHC - Pension"],
+    ["tsp", "TSP Court Order", "PDF: TSP"],
+    ["tsp-addendum", "TSP Addendum", "PDF: TSP Addendum"],
+    ["fidelity", "Fidelity QDRO", "PDF: Fidelity"]
+  ];
 
-  return sources.flatMap(([kind, label, header], index) => {
+  const uploadedFiles = sources.flatMap(([kind, label, header], index) => {
     const raw = reader.byHeader(header);
     if (!raw) return [];
     return splitFileValues(raw).map((url, fileIndex) => ({
@@ -303,6 +328,21 @@ function makeFiles(reader) {
       url
     }));
   });
+
+  const generatedFiles = generatedSources.flatMap(([slug, label, header]) => {
+    const raw = reader.byHeader(header);
+    if (!raw) return [];
+    return splitFileValues(raw).map((url, fileIndex) => ({
+      id: `import-generated-${slug}-${fileIndex + 1}`,
+      label,
+      kind: "generated",
+      fileName: getFileName(url, label),
+      status: "generated",
+      url
+    }));
+  });
+
+  return [...uploadedFiles, ...generatedFiles];
 }
 
 function splitFileValues(value) {
@@ -379,7 +419,7 @@ function buildFields(reader) {
     party2_ssn: reader.byHeader("Party 2 SSN"),
     party2_dob: normalizeDate(reader.byHeader("Party 2 birth date")),
     plan_family: normalizePlanFamily(reader),
-    entity_name: reader.byHeader("Name of financial entity who holds the funds"),
+    entity_name: getFinancialEntityName(reader),
     financial_entity_name: reader.byHeader("Financial Entity Name"),
     account_type: normalizeAccountType(reader.byHeader("What kind of account is this?"), reader.byHeader("What kind of TSP account is this?")),
     tsp_account_type: reader.byHeader("What kind of TSP account is this?"),
