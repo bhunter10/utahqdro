@@ -119,7 +119,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section home-process-section">
         <div className="section-head">
           <div>
             <div className="eyebrow">How it works</div>
@@ -141,7 +141,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="band">
+      <section className="band home-band">
         <div className="section-head" style={{ marginBottom: 0 }}>
           <div>
             <div className="eyebrow" style={{ color: "#8ee0d6" }}>

@@ -320,8 +320,8 @@ p {
   grid-template-columns: minmax(0, 0.92fr) minmax(420px, 0.84fr);
   gap: 34px;
   align-items: start;
-  min-height: min(650px, calc(100vh - 76px));
-  padding: 56px 0 46px;
+  min-height: 0;
+  padding: 56px 0 0;
 }
 
 .home-hero-copy {
@@ -348,6 +348,14 @@ p {
   margin-top: 22px;
 }
 
+.home-process-section {
+  padding: 12px 0 46px;
+}
+
+.home-band {
+  margin: 28px 0 52px;
+}
+
 .home-page .hero-points {
   max-width: 720px;
 }
@@ -362,13 +370,13 @@ p {
 
 .home-hero-visual {
   position: relative;
-  min-height: 560px;
+  min-height: 500px;
 }
 
 .home-utah-outline {
   position: absolute;
   right: 0;
-  top: 0;
+  top: -42px;
   display: grid;
   place-items: center;
   width: min(500px, 100%);
@@ -2474,19 +2482,29 @@ th {
 
   .home-hero {
     min-height: 0;
-    padding-top: 44px;
+    gap: 24px;
+    padding: 44px 0 34px;
   }
 
   .home-hero-visual {
-    min-height: 520px;
+    min-height: 450px;
   }
 
   .home-utah-outline {
     left: 50%;
     right: auto;
-    width: min(500px, 100%);
-    height: 520px;
+    top: -18px;
+    width: min(460px, 100%);
+    height: 470px;
     transform: translateX(-50%);
+  }
+
+  .home-process-section {
+    padding: 24px 0 38px;
+  }
+
+  .home-band {
+    margin: 22px 0 44px;
   }
 
   .about-portrait {
@@ -2569,6 +2587,21 @@ th {
     padding: 58px 0;
   }
 
+  .home-hero {
+    gap: 18px;
+    padding: 40px 0 28px;
+  }
+
+  .home-hero-copy .lead {
+    margin-top: 16px;
+    font-size: 17px;
+    line-height: 1.58;
+  }
+
+  .home-hero .hero-actions {
+    margin-top: 22px;
+  }
+
   .home-hero-copy h1 {
     font-size: clamp(40px, 12vw, 54px);
   }
@@ -2580,16 +2613,41 @@ th {
 
   .home-page .hero-points {
     grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 22px;
+  }
+
+  .home-page .hero-point {
+    min-height: 40px;
+    padding: 9px 10px;
+    font-size: 14px;
   }
 
   .home-hero-visual {
-    min-height: 500px;
+    min-height: 392px;
   }
 
   .home-utah-outline {
-    top: 0;
-    width: min(380px, 100%);
-    height: 500px;
+    top: -10px;
+    width: min(350px, 100%);
+    height: 400px;
+  }
+
+  .home-map-marker {
+    gap: 5px;
+    padding: 5px 8px 5px 5px;
+    font-size: 11px;
+    box-shadow:
+      0 10px 22px rgba(22, 32, 51, 0.1),
+      0 0 0 3px rgba(255, 255, 255, 0.34);
+  }
+
+  .home-map-dot {
+    width: 9px;
+    height: 9px;
+    box-shadow:
+      0 0 0 5px rgba(201, 138, 44, 0.14),
+      0 0 14px rgba(201, 138, 44, 0.28);
   }
 
   .home-map-banner {
@@ -2606,6 +2664,19 @@ th {
 
   .home-map-banner span:last-child {
     font-size: 11px;
+  }
+
+  .home-process-section {
+    padding: 22px 0 34px;
+  }
+
+  .home-process-section .section-head {
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .home-band {
+    margin: 18px 0 36px;
   }
 
   .about-intro-section {
