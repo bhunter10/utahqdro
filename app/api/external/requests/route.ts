@@ -1,11 +1,25 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
-import type { QdroRequest, RequestFile } from "@/lib/types";
+import { requestStatuses, type PaymentState, type QdroRequest, type RequestFile, type RequestNote, type RequestStatus, type SignatureState } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 type ExternalAccessLevel = "redacted" | "owner";
+type ExternalWriteRequest = {
+  requestId?: string;
+  clientName?: string;
+  clientEmail?: string;
+  status?: RequestStatus;
+  paymentState?: PaymentState;
+  signatureState?: SignatureState;
+  templateFamily?: string;
+  fields?: Record<string, string | boolean>;
+  note?: {
+    body?: string;
+    visibility?: RequestNote["visibility"];
+  };
+};
 
 const defaultAllowedFields = [
   "plan_family",
@@ -43,6 +57,8 @@ const ownerBlockedFieldPatterns = [
   /(^|_)dob$/i,
   /birth/i
 ];
+const paymentStates = ["unpaid", "pending", "paid", "waived"] as const;
+const signatureStates = ["not_started", "sent", "partially_signed", "completed"] as const;
 
 export async function GET(req: Request) {
   const authResult = authorizeExternalRequest(req);
@@ -76,6 +92,59 @@ export async function GET(req: Request) {
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : "Could not load external request data." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(req: Request) {
+  const authResult = authorizeExternalRequest(req);
+  if (!authResult.ok) return authResult.response;
+  if (authResult.accessLevel !== "owner") {
+    return NextResponse.json({ message: "Owner API token is required for updates." }, { status: 403 });
+  }
+
+  const db = getAdminDb();
+  if (!db) {
+    return NextResponse.json({ message: "Firebase Admin is not configured." }, { status: 503 });
+  }
+
+  try {
+    const body = (await req.json()) as ExternalWriteRequest;
+    const requestId = sanitizeRequestId(body.requestId || "");
+    if (!requestId) {
+      return NextResponse.json({ message: "requestId is required." }, { status: 400 });
+    }
+
+    const ref = db.collection("requests").doc(requestId);
+    const updatedRequest = await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists) return null;
+
+      const current = normalizeRequest(snapshot.id, snapshot.data() || {});
+      const update = buildExternalUpdate(body, current.notes, current.fields);
+      if (!Object.keys(update).length) {
+        throw new Error("No supported changes were provided.");
+      }
+
+      transaction.update(ref, update);
+      return normalizeRequest(snapshot.id, {
+        ...snapshot.data(),
+        ...update
+      });
+    });
+
+    if (!updatedRequest) {
+      return NextResponse.json({ message: "Request not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      message: "Request updated.",
+      request: toOwnerExternalRequest(updatedRequest)
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { message: error instanceof Error ? error.message : "Could not update external request data." },
       { status: 500 }
     );
   }
@@ -122,6 +191,86 @@ function sanitizeLimit(value: string | null) {
   const parsed = Number(value || 25);
   if (!Number.isFinite(parsed)) return 25;
   return Math.min(Math.max(Math.trunc(parsed), 1), 100);
+}
+
+function buildExternalUpdate(body: ExternalWriteRequest, currentNotes: RequestNote[], currentFields: QdroRequest["fields"]) {
+  const update: Partial<QdroRequest> = {};
+  const fieldUpdates = filterOwnerWritableFields(body.fields);
+
+  if (body.clientName !== undefined) {
+    const clientName = sanitizeTextValue(body.clientName, 200);
+    if (!clientName) throw new Error("clientName cannot be blank.");
+    update.clientName = clientName;
+  }
+
+  if (body.clientEmail !== undefined) {
+    const clientEmail = sanitizeTextValue(body.clientEmail, 320);
+    if (!clientEmail) throw new Error("clientEmail cannot be blank.");
+    update.clientEmail = clientEmail;
+  }
+
+  if (body.status !== undefined) {
+    if (!requestStatuses.includes(body.status)) throw new Error("Unsupported status value.");
+    update.status = body.status;
+  }
+
+  if (body.paymentState !== undefined) {
+    if (!paymentStates.includes(body.paymentState)) throw new Error("Unsupported paymentState value.");
+    update.paymentState = body.paymentState;
+  }
+
+  if (body.signatureState !== undefined) {
+    if (!signatureStates.includes(body.signatureState)) throw new Error("Unsupported signatureState value.");
+    update.signatureState = body.signatureState;
+  }
+
+  if (body.templateFamily !== undefined) {
+    const templateFamily = String(body.templateFamily || "").trim().slice(0, 120);
+    if (!templateFamily) throw new Error("templateFamily cannot be blank.");
+    update.templateFamily = templateFamily;
+  }
+
+  if (Object.keys(fieldUpdates).length) {
+    update.fields = {
+      ...currentFields,
+      ...fieldUpdates
+    };
+
+    if (typeof fieldUpdates.plan_family === "string" && !body.templateFamily) {
+      update.templateFamily = fieldUpdates.plan_family;
+    }
+  }
+
+  const noteBody = String(body.note?.body || "").trim();
+  if (noteBody) {
+    update.notes = [
+      ...currentNotes,
+      {
+        id: `external-note-${Date.now()}`,
+        author: "External owner API",
+        visibility: body.note?.visibility === "client" ? "client" : "internal",
+        body: noteBody.slice(0, 5000),
+        createdAt: new Date().toISOString()
+      }
+    ];
+  }
+
+  if (Object.keys(update).length) update.updatedAt = new Date().toISOString();
+  return update;
+}
+
+function filterOwnerWritableFields(fields: ExternalWriteRequest["fields"]) {
+  if (!fields || typeof fields !== "object") return {};
+
+  return Object.fromEntries(
+    Object.entries(fields)
+      .filter(([key]) => !ownerBlockedFieldPatterns.some((pattern) => pattern.test(key)))
+      .map(([key, value]) => [key, typeof value === "boolean" ? value : sanitizeTextValue(value, 2000)])
+  );
+}
+
+function sanitizeTextValue(value: unknown, maxLength: number) {
+  return String(value || "").trim().slice(0, maxLength);
 }
 
 function toExternalRequest(id: string, data: FirebaseFirestore.DocumentData, accessLevel: ExternalAccessLevel) {
