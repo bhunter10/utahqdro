@@ -32,9 +32,9 @@ export default function HomePage() {
           <h1>Need a QDRO?</h1>
           <h2>We can handle the details.</h2>
           <p className="lead">
-            If your attorney or divorce decree says you need a QDRO, this guided
-            portal helps you provide the right information, sign electronically,
-            pay securely, and track each step.
+            If your attorney or divorce decree says you need a QDRO, we make it
+            easier to provide the right information, sign electronically, pay
+            securely, and keep track of each step.
           </p>
           <div className="hero-actions">
             <Link className="button primary" href="/qdro-request">
