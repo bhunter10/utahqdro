@@ -1,17 +1,11 @@
-import { HeroBackdrop } from "@/components/HeroBackdrop";
-
 export default function ContactPage() {
   return (
-    <main className="page compact-hero-page">
-      <HeroBackdrop variant="office" eyebrow="Contact" title="Send us a question.">
-        <p>
-          Use this form for general questions. If you are ready to begin a QDRO,
-          use the guided request flow so your information is saved securely.
-        </p>
-      </HeroBackdrop>
-      <section className="section">
-        <div className="grid two" style={{ marginTop: 28 }}>
-          <form className="panel">
+    <main className="page contact-page">
+      <section className="section contact-intro">
+        <div className="contact-intro-copy">
+          <div className="eyebrow">Contact UtahQDRO</div>
+          <h1>Send us a question.</h1>
+          <form className="contact-form contact-form-embedded">
             <div className="field-grid">
               <div className="field">
                 <label htmlFor="first">First name</label>
@@ -40,18 +34,25 @@ export default function ContactPage() {
               </button>
             </div>
           </form>
-          <aside className="panel">
-            <h2>Quick contact</h2>
-            <p>
-              <strong>Phone:</strong> 801-404-4600
-              <br />
-              <strong>Email:</strong> help@UtahQDRO.com
-              <br />
-              <strong>Address:</strong> Fibernet Building, 1145 S 800 E, Orem,
-              UT 84097
-            </p>
-          </aside>
         </div>
+        <aside className="contact-quick-card" aria-label="Quick contact details">
+          <span className="contact-quick-label">Quick contact</span>
+          <div className="contact-methods">
+            <a href="tel:18014044600">
+              <span>Phone</span>
+              <strong>801-404-4600</strong>
+            </a>
+            <a href="mailto:help@UtahQDRO.com">
+              <span>Email</span>
+              <strong>help@UtahQDRO.com</strong>
+            </a>
+            <address>
+              <span>Office</span>
+              <strong>Fibernet Building</strong>
+              <small>1145 S 800 E, Orem, UT 84097</small>
+            </address>
+          </div>
+        </aside>
       </section>
     </main>
   );

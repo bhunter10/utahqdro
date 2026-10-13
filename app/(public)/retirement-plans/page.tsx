@@ -1,5 +1,3 @@
-import { HeroBackdrop } from "@/components/HeroBackdrop";
-
 const planLogos = [
   { name: "Utah Retirement Systems", file: "urs.png" },
   { name: "DMBA", file: "dmba.png" },
@@ -27,24 +25,18 @@ const planLogos = [
 
 export default function RetirementPlansPage() {
   return (
-    <main className="page compact-hero-page retirement-plans-page">
-      <HeroBackdrop
-        variant="redrock"
-        eyebrow="Retirement plans"
-        title="Plan-specific questions, templates, and review."
-      >
-        <p>
-          QDRO language often depends on the retirement plan. The new intake
-          asks only the questions needed for the selected plan family and flags
-          uncertain answers for review.
-        </p>
-      </HeroBackdrop>
-      <section className="section">
+    <main className="page retirement-plans-page">
+      <section className="section retirement-plans-intro">
         <div className="section-head">
           <div>
             <div className="eyebrow">Retirement plans</div>
             <h2>Representative Plan Administrators we have worked with</h2>
           </div>
+          <p>
+            QDRO language often depends on the retirement plan. We prepare
+            plan-specific orders and help route them for review, approval, and
+            processing.
+          </p>
         </div>
 
         <section className="plan-logo-section">
@@ -61,17 +53,7 @@ export default function RetirementPlansPage() {
                 <h3>{logo.name}</h3>
               </article>
             ))}
-          </div>
-        </section>
-
-        <section className="band">
-          <div className="section-head" style={{ marginBottom: 0 }}>
-            <div>
-              <div className="eyebrow" style={{ color: "#8ee0d6" }}>
-                And many others
-              </div>
-              <h2>Not seeing your plan does not mean we cannot help.</h2>
-            </div>
+            <div className="many-others-inline">And many others.</div>
           </div>
         </section>
       </section>

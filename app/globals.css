@@ -1,6 +1,6 @@
 :root {
   --ink: #162033;
-  --muted: #667085;
+  --muted: #3f4a5a;
   --line: #d9e1ec;
   --soft: #f4f7fb;
   --panel: #ffffff;
@@ -203,7 +203,7 @@ p {
 
 .lead {
   max-width: 670px;
-  color: #475467;
+  color: var(--muted);
   font-size: 19px;
 }
 
@@ -311,6 +311,226 @@ p {
   color: white;
 }
 
+.home-page {
+  width: min(1160px, calc(100% - 32px));
+}
+
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(420px, 0.84fr);
+  gap: 34px;
+  align-items: start;
+  min-height: min(650px, calc(100vh - 76px));
+  padding: 56px 0 46px;
+}
+
+.home-hero-copy {
+  position: relative;
+  z-index: 2;
+}
+
+.home-hero-copy h1 {
+  max-width: 710px;
+  font-size: clamp(42px, 5.8vw, 68px);
+  line-height: 0.98;
+}
+
+.home-hero-copy h2 {
+  max-width: 710px;
+  margin-top: 8px;
+  color: var(--brand);
+  font-size: clamp(28px, 3.5vw, 42px);
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.home-hero-copy .lead {
+  margin-top: 22px;
+}
+
+.home-page .hero-points {
+  max-width: 720px;
+}
+
+.home-page .hero-point {
+  border-color: rgba(22, 75, 122, 0.14);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  box-shadow: 0 12px 28px rgba(22, 32, 51, 0.07);
+  backdrop-filter: none;
+}
+
+.home-hero-visual {
+  position: relative;
+  min-height: 560px;
+}
+
+.home-utah-outline {
+  position: absolute;
+  right: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: min(500px, 100%);
+  height: 560px;
+  z-index: 1;
+}
+
+.home-utah-outline::before {
+  content: "";
+  position: absolute;
+  inset: 24px 6px 34px 0;
+  z-index: -1;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 56% 34%, rgba(201, 138, 44, 0.18), transparent 28%),
+    radial-gradient(circle at 48% 62%, rgba(15, 118, 110, 0.16), transparent 34%),
+    radial-gradient(circle at 50% 50%, rgba(22, 75, 122, 0.08), transparent 58%);
+  filter: blur(2px);
+}
+
+.home-utah-outline svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.home-utah-outline path {
+  fill: url(#utahMapFill);
+  stroke: var(--brand);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 34px 34px rgba(22, 32, 51, 0.16));
+}
+
+.home-map-marker {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+  border: 1px solid rgba(22, 75, 122, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow:
+    0 12px 26px rgba(22, 32, 51, 0.12),
+    0 0 0 4px rgba(255, 255, 255, 0.38);
+  color: var(--ink);
+  padding: 7px 11px 7px 7px;
+  font-size: 13px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.home-map-dot {
+  display: block;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f5b759, var(--accent));
+  box-shadow:
+    0 0 0 7px rgba(201, 138, 44, 0.16),
+    0 0 18px rgba(201, 138, 44, 0.32);
+}
+
+.home-map-marker-logan {
+  top: 12%;
+  left: 34%;
+}
+
+.home-map-marker-ogden {
+  top: 22%;
+  left: 35%;
+}
+
+.home-map-marker-slc {
+  top: 30%;
+  left: 35%;
+}
+
+.home-map-marker-park-city {
+  top: 34%;
+  left: 54%;
+}
+
+.home-map-marker-provo {
+  top: 43%;
+  left: 39%;
+}
+
+.home-map-marker-price {
+  top: 53%;
+  left: 53%;
+}
+
+.home-map-marker-moab {
+  top: 65%;
+  left: 64%;
+}
+
+.home-map-marker-richfield {
+  top: 62%;
+  left: 34%;
+}
+
+.home-map-marker-cedar-city {
+  top: 77%;
+  left: 28%;
+}
+
+.home-map-marker-st-george {
+  top: 89%;
+  left: 25%;
+}
+
+.home-map-banner {
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: min(176px, 42%);
+  border: 1px solid rgba(22, 75, 122, 0.15);
+  border-left: 5px solid var(--accent);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(236, 247, 246, 0.94)),
+    white;
+  box-shadow:
+    0 22px 50px rgba(22, 32, 51, 0.16),
+    0 0 0 6px rgba(255, 255, 255, 0.34);
+  padding: 13px 14px 13px 12px;
+  transform: translateY(-50%) rotate(-1deg);
+}
+
+.home-map-banner-check {
+  display: inline-grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  flex: 0 0 auto;
+  background: transparent;
+  box-shadow: none;
+  color: var(--success);
+  font-size: 26px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.home-map-banner span:last-child {
+  display: block;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .checklist {
   display: grid;
   gap: 12px;
@@ -382,6 +602,261 @@ p {
   margin-bottom: 0;
 }
 
+.about-intro-section {
+  padding-top: 56px;
+}
+
+.about-profile {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(420px, 0.82fr);
+  gap: 26px;
+  align-items: start;
+}
+
+.about-copy {
+  max-width: 740px;
+}
+
+.about-copy h1 {
+  margin-top: 10px;
+  max-width: 680px;
+}
+
+.about-copy p {
+  font-size: 17px;
+}
+
+.about-stat-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 24px 0 22px;
+}
+
+.about-stat-row div {
+  min-height: 104px;
+  border: 1px solid rgba(22, 75, 122, 0.13);
+  border-radius: 8px;
+  background: white;
+  padding: 18px;
+  box-shadow: 0 14px 38px rgba(22, 32, 51, 0.06);
+}
+
+.about-stat-row strong {
+  display: block;
+  color: var(--brand);
+  font-size: clamp(23px, 2.4vw, 30px);
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.about-stat-row span {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.about-proof-list {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: -6px 0 0;
+}
+
+.about-proof-list .mini-check {
+  align-items: center;
+  border-color: rgba(15, 118, 110, 0.18);
+  background: rgba(255, 255, 255, 0.88);
+  min-height: 66px;
+}
+
+.about-proof-list .mini-check strong {
+  color: #263449;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.about-portrait {
+  position: relative;
+  display: grid;
+  place-items: start center;
+  align-self: start;
+  min-height: 560px;
+  margin: -10px 0 0;
+  overflow: visible;
+  background: transparent;
+}
+
+.about-portrait img {
+  position: relative;
+  display: block;
+  width: min(590px, 122%);
+  max-height: 610px;
+  object-fit: contain;
+  object-position: bottom center;
+  filter: drop-shadow(0 28px 34px rgba(22, 32, 51, 0.18));
+  transform: translate(12px, -8px);
+}
+
+.about-portrait figcaption {
+  position: absolute;
+  right: 6px;
+  bottom: 30px;
+  width: min(270px, 75%);
+  border-left: 4px solid var(--accent);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 50px rgba(22, 32, 51, 0.12);
+  padding: 16px 18px;
+}
+
+.about-portrait figcaption span {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.about-detail-section {
+  position: relative;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  padding: 56px max(16px, calc((100vw - 1160px) / 2));
+  background: #ffffff;
+  border-top: 1px solid rgba(217, 225, 236, 0.75);
+  border-bottom: 1px solid rgba(217, 225, 236, 0.75);
+}
+
+.about-note {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(280px, 0.7fr);
+  gap: 28px;
+  align-items: end;
+  margin-bottom: 26px;
+}
+
+.about-note h2 {
+  margin-top: 10px;
+}
+
+.about-note p {
+  margin: 0;
+}
+
+.about-detail-section .card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border-color: rgba(22, 75, 122, 0.14);
+  background: linear-gradient(180deg, #ffffff, #f8fbfe);
+  box-shadow: 0 12px 30px rgba(22, 32, 51, 0.06);
+}
+
+.about-detail-section .card .icon {
+  width: 34px;
+  height: 34px;
+  background: rgba(201, 138, 44, 0.14);
+  color: #a76612;
+}
+
+.contact-page {
+  padding-top: 28px;
+}
+
+.contact-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.44fr);
+  gap: 28px;
+  align-items: stretch;
+  padding: 34px 0 28px;
+}
+
+.contact-intro-copy {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(22, 75, 122, 0.08), rgba(15, 118, 110, 0.05)),
+    white;
+  box-shadow: var(--shadow);
+  padding: clamp(28px, 4vw, 46px);
+}
+
+.contact-intro-copy h1 {
+  margin-top: 6px;
+  max-width: 680px;
+}
+
+.contact-intro-copy .lead {
+  margin-top: 10px;
+}
+
+.contact-quick-card {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  border: 1px solid rgba(22, 75, 122, 0.14);
+  border-radius: 8px;
+  background: var(--ink);
+  color: white;
+  box-shadow: var(--shadow);
+  padding: 26px;
+}
+
+.contact-quick-label {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.contact-methods {
+  display: grid;
+  gap: 12px;
+}
+
+.contact-methods a,
+.contact-methods address {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 14px;
+  font-style: normal;
+}
+
+.contact-methods span,
+.contact-methods small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.contact-methods strong {
+  color: white;
+  font-size: 16px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.contact-form {
+  display: grid;
+  gap: 22px;
+  padding: 26px;
+}
+
+.contact-form-embedded {
+  margin-top: 18px;
+  padding: 0;
+}
+
 .compact-card {
   min-height: 138px;
 }
@@ -447,6 +922,10 @@ p {
   margin-top: 46px;
 }
 
+.retirement-plans-intro {
+  padding-top: 72px;
+}
+
 .plan-logo-section {
   display: grid;
   gap: 16px;
@@ -491,6 +970,20 @@ p {
   line-height: 1.25;
 }
 
+.many-others-inline {
+  display: grid;
+  place-items: center;
+  min-height: 224px;
+  border: 1px dashed rgba(22, 75, 122, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.54);
+  color: var(--brand);
+  padding: 20px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 850;
+}
+
 .form-layout {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
@@ -517,7 +1010,7 @@ p {
   border-radius: 8px;
   padding: 10px 12px;
   background: transparent;
-  color: #475467;
+  color: var(--muted);
   text-align: left;
   cursor: pointer;
   font-weight: 750;
@@ -706,7 +1199,7 @@ p {
 
 .field-guidance {
   margin: -2px 0 2px;
-  color: #475467;
+  color: var(--muted);
   font-weight: 700;
 }
 
@@ -822,7 +1315,7 @@ p {
 .readiness-blocker {
   border-left: 3px solid #f59e0b;
   padding: 0 0 0 12px;
-  color: #475467;
+  color: var(--muted);
 }
 
 .readiness-blocker {
@@ -866,7 +1359,7 @@ p {
 .ai-intake-head p {
   max-width: 760px;
   margin: 0;
-  color: #475467;
+  color: var(--muted);
 }
 
 .ai-intake-message {
@@ -893,7 +1386,7 @@ p {
 
 .readiness-intro p {
   margin: 0;
-  color: #475467;
+  color: var(--muted);
 }
 
 .ai-upload-grid {
@@ -1115,7 +1608,7 @@ p {
 }
 
 .ai-review-field-copy span {
-  color: #475467;
+  color: var(--muted);
   font-size: 13px;
   font-weight: 800;
 }
@@ -1259,7 +1752,7 @@ td {
 }
 
 th {
-  color: #475467;
+  color: var(--muted);
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -1831,21 +2324,106 @@ th {
   font-size: 14px;
 }
 
+.faq-page {
+  padding-top: 28px;
+}
+
+.faq-intro {
+  padding: 34px 0 26px;
+}
+
+.faq-intro-copy {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(22, 75, 122, 0.08), rgba(15, 118, 110, 0.05)),
+    white;
+  padding: clamp(26px, 4vw, 44px);
+  box-shadow: var(--shadow);
+}
+
+.faq-intro-copy h1 {
+  margin: 10px 0 16px;
+  max-width: 680px;
+  white-space: nowrap;
+}
+
+.faq-intro-copy p {
+  max-width: 680px;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.faq-content {
+  padding-top: 22px;
+}
+
 .faq-list {
   display: grid;
-  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
 }
 
 .faq-list details {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: white;
-  padding: 18px;
+  padding: 0;
+  box-shadow: 0 14px 34px rgba(22, 32, 51, 0.07);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.faq-list details:hover,
+.faq-list details[open] {
+  border-color: rgba(22, 75, 122, 0.28);
+  box-shadow: 0 18px 42px rgba(22, 32, 51, 0.1);
+  transform: translateY(-1px);
 }
 
 .faq-list summary {
+  position: relative;
   cursor: pointer;
+  padding: 20px 56px 20px 20px;
   font-weight: 850;
+  line-height: 1.35;
+  list-style: none;
+}
+
+.faq-list summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-list summary::after {
+  content: "+";
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(22, 75, 122, 0.08);
+  color: var(--brand);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.faq-list details[open] summary::after {
+  content: "−";
+}
+
+.faq-list details p {
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding: 14px 20px 20px;
+  color: var(--muted);
+  line-height: 1.68;
 }
 
 @media (max-width: 900px) {
@@ -1861,8 +2439,12 @@ th {
   }
 
   .hero,
+  .home-hero,
+  .about-profile,
+  .contact-intro,
   .form-layout,
   .footer-inner,
+  .faq-list,
   .grid.three,
   .grid.two {
     grid-template-columns: 1fr;
@@ -1888,6 +2470,40 @@ th {
   .section-head {
     align-items: start;
     flex-direction: column;
+  }
+
+  .home-hero {
+    min-height: 0;
+    padding-top: 44px;
+  }
+
+  .home-hero-visual {
+    min-height: 520px;
+  }
+
+  .home-utah-outline {
+    left: 50%;
+    right: auto;
+    width: min(500px, 100%);
+    height: 520px;
+    transform: translateX(-50%);
+  }
+
+  .about-portrait {
+    min-height: 500px;
+    margin-top: 0;
+    place-items: start center;
+  }
+
+  .about-portrait img {
+    width: min(500px, 104%);
+    max-height: 520px;
+    transform: none;
+  }
+
+  .about-note {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
   .admin-list-head,
@@ -1953,8 +2569,119 @@ th {
     padding: 58px 0;
   }
 
+  .home-hero-copy h1 {
+    font-size: clamp(40px, 12vw, 54px);
+  }
+
+  .home-hero-copy h2 {
+    font-size: clamp(28px, 8vw, 38px);
+    white-space: normal;
+  }
+
+  .home-page .hero-points {
+    grid-template-columns: 1fr;
+  }
+
+  .home-hero-visual {
+    min-height: 500px;
+  }
+
+  .home-utah-outline {
+    top: 0;
+    width: min(380px, 100%);
+    height: 500px;
+  }
+
+  .home-map-banner {
+    left: 0;
+    top: 52%;
+    width: min(168px, 47%);
+    gap: 8px;
+    padding: 11px 12px 11px 10px;
+  }
+
+  .home-map-banner-check {
+    font-size: 23px;
+  }
+
+  .home-map-banner span:last-child {
+    font-size: 11px;
+  }
+
+  .about-intro-section {
+    padding-top: 44px;
+  }
+
+  .retirement-plans-intro {
+    padding-top: 44px;
+  }
+
+  .contact-page {
+    padding-top: 12px;
+  }
+
+  .contact-intro {
+    padding-top: 34px;
+  }
+
+  .contact-intro-copy,
+  .contact-quick-card,
+  .contact-form {
+    padding: 22px;
+  }
+
+  .faq-page {
+    padding-top: 12px;
+  }
+
+  .faq-intro {
+    padding-top: 34px;
+  }
+
+  .faq-intro-copy {
+    padding: 22px;
+  }
+
+  .faq-intro-copy h1 {
+    white-space: normal;
+  }
+
   .hero-points {
     grid-template-columns: 1fr;
+  }
+
+  .about-profile {
+    gap: 28px;
+  }
+
+  .about-copy .hero-actions {
+    margin-bottom: 8px;
+  }
+
+  .about-stat-row {
+    grid-template-columns: 1fr;
+  }
+
+  .about-proof-list {
+    grid-template-columns: 1fr;
+  }
+
+  .about-portrait {
+    min-height: 430px;
+    margin-top: -8px;
+    margin-bottom: 0;
+  }
+
+  .about-portrait img {
+    width: min(380px, 108%);
+    max-height: 440px;
+  }
+
+  .about-portrait figcaption {
+    right: 0;
+    bottom: 18px;
+    width: min(250px, 86%);
+    padding: 14px 16px;
   }
 
   .logo-grid {

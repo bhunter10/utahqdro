@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { HeroBackdrop } from "@/components/HeroBackdrop";
 
 const steps = [
   [
@@ -26,27 +25,25 @@ const steps = [
 
 export default function HomePage() {
   return (
-    <main className="page">
-      <HeroBackdrop
-        variant="hero"
-        eyebrow="Utah QDRO preparation"
-        title="Need a QDRO? We’ll handle the details."
-        actions={
-          <>
+    <main className="page home-page">
+      <section className="section home-hero">
+        <div className="home-hero-copy">
+          <div className="eyebrow">Utah QDRO preparation</div>
+          <h1>Need a QDRO?</h1>
+          <h2>We can handle the details.</h2>
+          <p className="lead">
+            If your attorney or divorce decree says you need a QDRO, this guided
+            portal helps you provide the right information, sign electronically,
+            pay securely, and track each step.
+          </p>
+          <div className="hero-actions">
             <Link className="button primary" href="/qdro-request">
               Start Your QDRO
             </Link>
             <Link className="button secondary" href="/faqs">
               Read FAQs
             </Link>
-          </>
-        }
-      >
-          <p className="lead">
-            If your attorney or divorce decree says you need a QDRO, this guided
-            portal helps you provide the right information, sign electronically,
-            pay securely, and track each step.
-          </p>
+          </div>
           <div className="hero-points">
             {[
               "Quick turn around times",
@@ -60,7 +57,67 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-      </HeroBackdrop>
+        </div>
+
+        <div className="home-hero-visual home-utah-hero" aria-label="Utah QDRO process preview">
+          <div className="home-utah-outline" aria-hidden="true">
+            <svg viewBox="0 0 360 460" role="img">
+              <defs>
+                <linearGradient id="utahMapFill" x1="0" x2="1" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#ffffff" />
+                  <stop offset="55%" stopColor="#edf6f5" />
+                  <stop offset="100%" stopColor="#e8f0f8" />
+                </linearGradient>
+              </defs>
+              <path d="M54 42H254V130H330V418H48Z" />
+            </svg>
+            <span className="home-map-marker home-map-marker-logan">
+              <span className="home-map-dot" />
+              <span>Logan</span>
+            </span>
+            <span className="home-map-marker home-map-marker-ogden">
+              <span className="home-map-dot" />
+              <span>Ogden</span>
+            </span>
+            <span className="home-map-marker home-map-marker-slc">
+              <span className="home-map-dot" />
+              <span>Salt Lake City</span>
+            </span>
+            <span className="home-map-marker home-map-marker-park-city">
+              <span className="home-map-dot" />
+              <span>Park City</span>
+            </span>
+            <span className="home-map-marker home-map-marker-provo">
+              <span className="home-map-dot" />
+              <span>Provo</span>
+            </span>
+            <span className="home-map-marker home-map-marker-price">
+              <span className="home-map-dot" />
+              <span>Price</span>
+            </span>
+            <span className="home-map-marker home-map-marker-moab">
+              <span className="home-map-dot" />
+              <span>Moab</span>
+            </span>
+            <span className="home-map-marker home-map-marker-richfield">
+              <span className="home-map-dot" />
+              <span>Richfield</span>
+            </span>
+            <span className="home-map-marker home-map-marker-cedar-city">
+              <span className="home-map-dot" />
+              <span>Cedar City</span>
+            </span>
+            <span className="home-map-marker home-map-marker-st-george">
+              <span className="home-map-dot" />
+              <span>St. George</span>
+            </span>
+            <div className="home-map-banner">
+              <span className="home-map-banner-check">✓</span>
+              <span>Serving all of&nbsp;Utah</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="section">
         <div className="section-head">
