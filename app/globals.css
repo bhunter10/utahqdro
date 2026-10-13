@@ -931,7 +931,11 @@ p {
 }
 
 .retirement-plans-intro {
-  padding-top: 72px;
+  padding-top: 56px;
+}
+
+.retirement-plans-intro .section-head h2 {
+  margin-top: 10px;
 }
 
 .plan-logo-section {
