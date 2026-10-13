@@ -32,9 +32,10 @@ export default function HomePage() {
           <h1>Need a QDRO?</h1>
           <h2>We can handle the details.</h2>
           <p className="lead">
-            If your attorney or divorce decree says you need a QDRO, we make it
-            easier to provide the right information, sign electronically, pay
-            securely, and keep track of each step.
+            If your attorney or divorce decree says you need a QDRO, you’re in
+            the right place. We prepare accurate, court-ready orders designed to
+            avoid mistakes, delays, and unnecessary hassle for a flat fee of
+            $550. You can start online 24/7 here.
           </p>
           <div className="hero-actions">
             <Link className="button primary" href="/qdro-request">
