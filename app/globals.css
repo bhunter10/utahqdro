@@ -2380,6 +2380,12 @@ th {
   gap: 16px;
 }
 
+.faq-column {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
 .faq-list details {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2561,6 +2567,10 @@ th {
 
   .request-modal-grid {
     grid-template-columns: 1fr;
+  }
+
+  .faq-column {
+    display: contents;
   }
 }
 

@@ -2,6 +2,11 @@ import Link from "next/link";
 import { faqs } from "@/lib/content";
 
 export default function FaqPage() {
+  const faqColumns = [
+    faqs.filter((_, index) => index % 2 === 0),
+    faqs.filter((_, index) => index % 2 === 1)
+  ];
+
   return (
     <main className="page faq-page">
       <section className="section faq-intro">
@@ -25,11 +30,19 @@ export default function FaqPage() {
 
       <section className="section faq-content" aria-label="QDRO questions and answers">
         <div className="faq-list">
-          {faqs.map((faq) => (
-            <details key={faq.q}>
-              <summary>{faq.q}</summary>
-              <p>{faq.a}</p>
-            </details>
+          {faqColumns.map((column, columnIndex) => (
+            <div className="faq-column" key={`faq-column-${columnIndex}`}>
+              {column.map((faq) => {
+                const originalIndex = faqs.findIndex((item) => item.q === faq.q);
+
+                return (
+                  <details key={faq.q} style={{ order: originalIndex }}>
+                    <summary>{faq.q}</summary>
+                    <p>{faq.a}</p>
+                  </details>
+                );
+              })}
+            </div>
           ))}
         </div>
       </section>
