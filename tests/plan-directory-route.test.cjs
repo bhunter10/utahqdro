@@ -19,7 +19,8 @@ function compile(relativePath, mocks = {}) {
 }
 
 const directory = compile("lib/plan-directory.ts", {
-  "./content": { intakeSteps: [{ fields: [
+  "./template-matching": { selectTemplateFromList: () => ({ name: "Matched template" }) },
+  "./content": { documentTemplates: [{ family: "URS", active: true, accountTypes: ["401k plan", "Pension"] }], intakeSteps: [{ fields: [
     { id: "plan_family", options: ["Fidelity", "URS", "Other"] },
     { id: "account_type", options: ["401k plan", "Pension", "Other"] }
   ] }] }
@@ -81,4 +82,15 @@ test("saved plans can be retrieved", async () => {
   const response = await setup().get();
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).plans, [{ ...input, id: "saved" }]);
+});
+
+test("existing offerings appear without saved records and saved details replace their offering", () => {
+  const offered = directory.mergeOfferedPlans([]);
+  assert.equal(offered.length, 3);
+  assert.ok(offered.some((plan) => plan.entity === "URS" && plan.accountType === "Pension"));
+  assert.ok(offered.every((plan) => plan.administrator === ""));
+  const saved = { ...input, id: "saved", entity: "URS" };
+  const merged = directory.mergeOfferedPlans([saved]);
+  assert.equal(merged.filter((plan) => plan.entity === "URS" && plan.accountType === "401k plan").length, 1);
+  assert.ok(merged.includes(saved));
 });

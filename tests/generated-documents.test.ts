@@ -102,3 +102,17 @@ test("saved custom template content is used in generated documents", () => {
   assert.ok(html.includes("Custom saved text"));
   assert.ok(!html.includes("{{party1_name}}"));
 });
+
+
+test("plan directory uses document template routing for each offered plan and account type", async () => {
+  const { offeredPlans, matchedPlanTemplate } = await import("../lib/plan-directory");
+  const { selectTemplateFromList } = await import("../lib/document-engine");
+  for (const plan of offeredPlans) {
+    const request = { ...demoRequest, templateFamily: plan.entity, fields: { plan_family: plan.entity, account_type: plan.accountType } };
+    assert.equal(matchedPlanTemplate(plan).id, selectTemplateFromList(request, documentTemplates).id);
+  }
+  assert.equal(matchedPlanTemplate({ entity: "DMBA", accountType: "Pension" }).id, "dmba-pension-v1");
+  assert.equal(matchedPlanTemplate({ entity: "URS", accountType: "457 plan" }).id, "urs-defined-contribution-v1");
+  assert.equal(matchedPlanTemplate({ entity: "Kroger", accountType: "401k plan" }).id, "multi-template-v1");
+  assert.ok(offeredPlans.some((plan) => plan.entity === "Kroger" && plan.accountType === "401k plan"));
+});
