@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { documentHtmlToRtf } from "../lib/document-rtf";
-import { renderGeneratedDocumentHtml } from "../lib/generated-documents";
+import { generateDocumentFile, renderGeneratedDocumentHtml } from "../lib/generated-documents";
 import { demoRequest, documentTemplates } from "../lib/content";
 
 test("RTF escapes control characters and preserves Unicode", () => {
@@ -115,4 +115,25 @@ test("plan directory uses document template routing for each offered plan and ac
   assert.equal(matchedPlanTemplate({ entity: "URS", accountType: "457 plan" }).id, "urs-defined-contribution-v1");
   assert.equal(matchedPlanTemplate({ entity: "Kroger", accountType: "401k plan" }).id, "multi-template-v1");
   assert.ok(offeredPlans.some((plan) => plan.entity === "Kroger" && plan.accountType === "401k plan"));
+});
+
+
+test("DOCX contains editable template text, tables, and Letter page settings", async () => {
+  const JSZip = require("jszip");
+  for (const type of ["qdro", "appearance", "withdrawal", "addendum"] as const) {
+    const html = renderGeneratedDocumentHtml(demoRequest, type, documentTemplates);
+    const buffer = await generateDocumentFile(html, "docx");
+    assert.equal(buffer.subarray(0, 2).toString(), "PK");
+    const zip = await JSZip.loadAsync(buffer);
+    const xml = await zip.file("word/document.xml").async("string");
+    assert.ok(xml.includes("<w:t"), type);
+    assert.ok(xml.includes("<w:tbl>"), type);
+    assert.ok(xml.includes('w:w="12240"'), type);
+    assert.ok(xml.includes('w:h="15840"'), type);
+    assert.ok(!xml.includes("{{party1_name}}"), type);
+    assert.ok(!xml.includes("altChunk"), type);
+    const styles = await zip.file("word/styles.xml").async("string");
+    assert.ok(styles.includes("Times New Roman"), type);
+    assert.ok(styles.includes('w:val="24"'), type);
+  }
 });

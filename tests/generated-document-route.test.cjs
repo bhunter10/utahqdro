@@ -23,7 +23,7 @@ function setup({ allowed = true, exists = true, failSave = false } = {}) {
     "@/lib/generated-documents": {
       generatedDocumentLabels: { qdro: "QDRO Draft", appearance: "Appearance of Counsel", withdrawal: "Withdrawal of Counsel", addendum: "Addendum" },
       renderGeneratedDocumentHtml: (request, type) => { calls.generated.push({ request, type }); return "<p>Filled document</p>"; },
-      generateDocumentFile: async (html, format) => Buffer.from(format === "pdf" ? "%PDF-test" : "{\\rtf1 test}")
+      generateDocumentFile: async (html, format) => Buffer.from(format === "pdf" ? "%PDF-test" : "PK-test")
     },
     "firebase-admin/firestore": { FieldValue: { arrayUnion: (file) => ({ arrayUnion: file }) } }
   };
@@ -52,12 +52,13 @@ test("attachment requires admin access", async () => {
 test("invalid formats and missing requests never create files", async () => {
   const { post, calls } = setup();
   assert.equal((await post({ ...input, format: "html" })).status, 400);
+  assert.equal((await post({ ...input, format: "rtf" })).status, 400);
   assert.equal((await post({ ...input, requestId: "bad/path" })).status, 400);
   assert.equal(calls.uploads.length, 0);
   assert.equal((await setup({ exists: false }).post(input)).status, 404);
 });
 
-for (const format of ["pdf", "rtf"]) {
+for (const format of ["pdf", "docx"]) {
   test(`${format} attachments use preview values and append atomically`, async () => {
     const { post, calls } = setup();
     const response = await post({ ...input, format });
@@ -67,7 +68,7 @@ for (const format of ["pdf", "rtf"]) {
     assert.equal(result.file.kind, "generated");
     assert.ok(result.file.fileName.endsWith(`.${format}`));
     assert.equal(calls.updates[0].files.arrayUnion.id, result.file.id);
-    assert.equal(calls.uploads[0].options.contentType, format === "pdf" ? "application/pdf" : "application/rtf");
+    assert.equal(calls.uploads[0].options.contentType, format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     assert.ok(!Object.hasOwn(calls.updates[0], "fields"));
   });
 }

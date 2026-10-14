@@ -26,7 +26,6 @@ export function DocumentPreview({
   templates?: DocumentTemplate[];
   onAttachDocument?: (documentType: GeneratedDocumentType, format: GeneratedDocumentFormat) => Promise<string>;
 }) {
-  const [documentFormats, setDocumentFormats] = useState<Partial<Record<PreviewDocumentType, GeneratedDocumentFormat>>>({});
   const [attachmentStatus, setAttachmentStatus] = useState("");
   const [isAttaching, setIsAttaching] = useState(false);
   const [googleDocResults, setGoogleDocResults] = useState<Partial<Record<PreviewDocumentType, GoogleDocResult>>>({});
@@ -129,7 +128,7 @@ export function DocumentPreview({
     setIsAttaching(true);
     setAttachmentStatus("");
     try {
-      setAttachmentStatus(await onAttachDocument(activeDocument, documentFormats[activeDocument] || "pdf"));
+      setAttachmentStatus(await onAttachDocument(activeDocument, "docx"));
     } catch (error) {
       setAttachmentStatus(error instanceof Error ? error.message : "Could not attach document.");
     } finally {
@@ -182,23 +181,9 @@ export function DocumentPreview({
             {isCreatingGoogleDoc ? "Generating..." : "Generate Google Doc"}
           </button>
           {onAttachDocument && (
-            <>
-              <select
-                className="select document-attachment-format"
-                aria-label="Attachment format"
-                value={documentFormats[activeDocument] || "pdf"}
-                disabled={isAttaching}
-                onChange={(event) => setDocumentFormats((current) => ({
-                  ...current, [activeDocument]: event.target.value as GeneratedDocumentFormat
-                }))}
-              >
-                <option value="pdf">PDF</option>
-                <option value="rtf">RTF</option>
-              </select>
-              <button className="button primary" type="button" onClick={() => void attachDocument()} disabled={isAttaching}>
-                {isAttaching ? "Attaching..." : "Attach document"}
-              </button>
-            </>
+            <button className="button primary" type="button" onClick={() => void attachDocument()} disabled={isAttaching}>
+              {isAttaching ? "Attaching..." : "Attach Word document (.docx) to client"}
+            </button>
           )}
         </div>
       </div>

@@ -1179,7 +1179,7 @@ function RequestEditor({
                       {canOpenFile ? (
                         <span className="file-action-row">
                           <button className="muted-link inline-button" type="button" onClick={() => openUploadedFile(request.id, file)}>
-                            Open document
+                            {/\.docx$/i.test(file.fileName || "") ? "Save document" : "Open document"}
                           </button>
                           {canRemoveFile && (
                             <button
@@ -1714,9 +1714,9 @@ function getClientPartyHeading(request: QdroRequest) {
     requesterRole === "I am the second name listed in the court case title" ||
     (requesterRole === "I am requesting this for someone else" && requesterAffiliation === "Party 2");
 
-  if (clientIsParty2 && party1Name && party2Name) return `${party2Name} vs. ${party1Name}`;
+  if (clientIsParty2 && party1Name && party2Name) return `${party2Name} v. ${party1Name}`;
 
-  if (party1Name && party2Name) return `${party1Name} vs. ${party2Name}`;
+  if (party1Name && party2Name) return `${party1Name} v. ${party2Name}`;
   return party1Name || party2Name;
 }
 

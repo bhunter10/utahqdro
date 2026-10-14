@@ -22,10 +22,10 @@ export async function POST(req: Request) {
     const { requestId, documentType, format, fields, templateFamily } = body;
     if (typeof requestId !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(requestId) ||
         !Object.hasOwn(generatedDocumentLabels, documentType) ||
-        (format !== "pdf" && format !== "rtf") ||
+        (format !== "pdf" && format !== "docx") ||
         !fields || typeof fields !== "object" || Array.isArray(fields) ||
         Object.values(fields).some((value) => typeof value !== "string" && typeof value !== "boolean")) {
-      return NextResponse.json({ message: "A request, document type, PDF/RTF format, and preview fields are required." }, { status: 400 });
+      return NextResponse.json({ message: "A request, document type, PDF/DOCX format, and preview fields are required." }, { status: 400 });
     }
 
     const ref = auth.db.collection("requests").doc(requestId);
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     const file: RequestFile = { id, label, kind: "generated", status: "generated", fileName, storagePath };
     await bucket.file(storagePath).save(buffer, {
       resumable: false,
-      contentType: format === "pdf" ? "application/pdf" : "application/rtf",
+      contentType: format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       metadata: { contentDisposition: `attachment; filename="${fileName}"`,
         metadata: { generatedBy: auth.uid, requestId, documentType } }
     });

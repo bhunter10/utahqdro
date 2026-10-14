@@ -31,14 +31,14 @@ Docs integrations.
 ## Generated document attachments
 
 In a request modal, open **Preview documents**, select QDRO, Appearance,
-Withdrawal, or an available Addendum, choose **PDF** or **RTF**, then click
-**Attach document**. Each document can use a different format. Generation uses
+Withdrawal, or an available Addendum, then click
+**Attach Word document (.docx) to client**. Generation uses
 the current preview values, including unsaved edits; it does not save those edits.
 The generated file is saved in Firebase Storage and added to the request's
 Firestore attachment list. Existing attachments remain available until removed.
 **Generate Google Doc** continues to use the existing Google export flow.
 
-PDF preserves the rendered layout. RTF preserves editable text, basic formatting,
-and table columns; pagination and spacing can vary between word processors.
+DOCX attachments use the same simple, styled templates as the Google Docs export,
+with editable text and tables. Pagination can vary between word processors.
 
 Run `npm run test:documents` for document-generation regression checks.

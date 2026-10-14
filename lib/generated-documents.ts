@@ -5,10 +5,9 @@ import {
   renderWithdrawalOfCounselHtml
 } from "./document-engine";
 import type { DocumentTemplate, QdroRequest } from "./types";
-import { documentHtmlToRtf } from "./document-rtf";
 
 export type GeneratedDocumentType = "qdro" | "appearance" | "withdrawal" | "addendum";
-export type GeneratedDocumentFormat = "pdf" | "rtf";
+export type GeneratedDocumentFormat = "pdf" | "docx";
 
 export const generatedDocumentLabels: Record<GeneratedDocumentType, string> = {
   qdro: "QDRO Draft",
@@ -28,8 +27,21 @@ export function renderGeneratedDocumentHtml(request: QdroRequest, documentType: 
 }
 
 export async function generateDocumentFile(html: string, format: GeneratedDocumentFormat): Promise<Buffer> {
-  if (format === "rtf") {
-    return Buffer.from(documentHtmlToRtf(html), "ascii");
+  if (format === "docx") {
+    const { default: htmlToDocx } = await import("@turbodocx/html-to-docx");
+    // Use the same inline template styles as Google Docs, with no extra table spacers.
+    const document = await htmlToDocx(
+      `<html><body style="font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">${html}</body></html>`,
+      null,
+      {
+        font: "Times New Roman", fontSize: 24, complexScriptFontSize: 24,
+        pageSize: { width: 12240, height: 15840 },
+        margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+        table: { row: { cantSplit: true }, addSpacingAfter: false },
+        decodeUnicode: true
+      }
+    );
+    return Buffer.from(document as ArrayBuffer);
   }
 
   const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
