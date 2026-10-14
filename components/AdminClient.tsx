@@ -1406,7 +1406,7 @@ function AdminFieldControl({
 }
 
 function ClientSignaturePreview({ signature }: { signature: string }) {
-  const isImageSignature = signature.startsWith("data:image/");
+  const isImageSignature = isDisplayableSignature(signature);
 
   return (
     <section className="admin-intake-step">
@@ -1423,6 +1423,16 @@ function ClientSignaturePreview({ signature }: { signature: string }) {
       </div>
     </section>
   );
+}
+
+function isDisplayableSignature(signature: string) {
+  if (signature.startsWith("data:image/")) return true;
+  try {
+    const parsed = new URL(signature);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 function AdminPartyFieldGroups({

@@ -324,7 +324,7 @@ function makeFiles(reader) {
       label,
       kind,
       fileName: getFileName(url, label),
-      status: "uploaded",
+      status: kind === "signed" ? "signed" : "uploaded",
       url
     }));
   });
