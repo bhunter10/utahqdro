@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
-import { planEntities, planAccountTypes, offeredPlans, mergeOfferedPlans, matchedPlanTemplate, type PlanEntry } from "@/lib/plan-directory";
+import { planEntities, planAccountTypes, offeredPlans, mergeOfferedPlans, matchedPlanTemplate, planSavePayload, type PlanEntry } from "@/lib/plan-directory";
 
 const emptyPlan: Omit<PlanEntry, "id"> = { name: "", administrator: "", entity: "", accountType: "", notes: "", active: true };
 
@@ -55,7 +55,7 @@ export function PlanLookup({ user }: { user: User }) {
       const token = await user.getIdToken();
       const response = await fetch("/api/admin/plans", {
         method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ ...draft, ...(editingId ? { id: editingId } : {}) })
+        body: JSON.stringify(planSavePayload(draft, editingId))
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Could not save plan.");
@@ -146,6 +146,7 @@ export function PlanLookup({ user }: { user: User }) {
           <dl className="plan-details">
             <dt>Plan name</dt><dd>{selectedPlan.name || "Not recorded yet"}</dd>
             <dt>Plan administrator</dt><dd style={{ whiteSpace: "pre-line" }}>{selectedPlan.administrator || "Not recorded yet"}</dd>
+            {selectedPlan.notes && <><dt>Notes / alternate names</dt><dd style={{ whiteSpace: "pre-line" }}>{selectedPlan.notes}</dd></>}
             <dt>QDRO template</dt><dd>{matchedPlanTemplate(selectedPlan).name}</dd>
           </dl>
           <button type="button" className="button secondary" disabled={saving} onClick={() => { detailDialog.current?.close(); setEditingId(selectedPlan.id.startsWith("offered-") ? "" : selectedPlan.id); setDraft({ ...selectedPlan, accountType: planAccountTypes.includes(selectedPlan.accountType) ? selectedPlan.accountType : "" }); setMessage(""); setEditingInModal(true); setShowForm(true); }}>Edit plan</button>

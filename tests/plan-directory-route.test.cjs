@@ -20,8 +20,8 @@ function compile(relativePath, mocks = {}) {
 
 const directory = compile("lib/plan-directory.ts", {
   "./template-matching": { selectTemplateFromList: () => ({ name: "Matched template" }) },
-  "./content": { documentTemplates: [{ family: "URS", active: true, accountTypes: ["401k plan", "Pension"] }], intakeSteps: [{ fields: [
-    { id: "plan_family", options: ["Fidelity", "URS", "Other"] },
+  "./content": { documentTemplates: [{ family: "URS", active: true, accountTypes: ["401k plan", "Pension"] }, { family: "Principal", active: true, accountTypes: ["401k plan"] }], intakeSteps: [{ fields: [
+    { id: "plan_family", options: ["Fidelity", "URS", "Principal", "Other"] },
     { id: "account_type", options: ["401k plan", "Pension", "Other"] }
   ] }] }
 });
@@ -84,13 +84,67 @@ test("saved plans can be retrieved", async () => {
   assert.deepEqual((await response.json()).plans, [{ ...input, id: "saved" }]);
 });
 
+test("editing a built-in offering creates a saved record, then updates that record", async () => {
+  const route = setup({ exists: false });
+  const draft = { ...input, id: "offered-fidelity-401k-plan" };
+  const payload = directory.planSavePayload(draft, "");
+  assert.equal(Object.hasOwn(payload, "id"), false);
+  const response = await route.put(payload);
+  assert.equal(response.status, 200);
+  const { plan } = await response.json();
+  assert.equal(plan.id, "new-plan");
+  const update = directory.planSavePayload({ ...plan, notes: "Updated contact" }, plan.id);
+  assert.equal(update.id, "new-plan");
+  const existing = setup();
+  assert.equal((await existing.put(update)).status, 200);
+  assert.equal(existing.writes[0].notes, "Updated contact");
+});
+
 test("existing offerings appear without saved records and saved details replace their offering", () => {
   const offered = directory.mergeOfferedPlans([]);
-  assert.equal(offered.length, 3);
+  assert.equal(offered.length, 4);
   assert.ok(offered.some((plan) => plan.entity === "URS" && plan.accountType === "Pension"));
-  assert.ok(offered.every((plan) => plan.administrator === ""));
+  assert.ok(offered.filter((plan) => plan.entity === "Fidelity").every((plan) => plan.administrator.startsWith("Fidelity Investments\n")));
+  const savings = offered.find((plan) => plan.entity === "URS" && plan.accountType === "401k plan");
+  const pension = offered.find((plan) => plan.entity === "URS" && plan.accountType === "Pension");
+  assert.match(savings.administrator, /Defined Contribution Department/);
+  assert.match(savings.administrator, /801-366-7720/);
+  assert.match(pension.administrator, /Defined Benefit Department/);
+  assert.match(pension.administrator, /801-366-7770/);
+  for (const plan of [savings, pension]) {
+    assert.match(plan.administrator, /84110-1590/);
+    assert.match(plan.administrator, /Fax 801-366-7733/);
+    assert.match(plan.administrator, /Email dcplans@urs.org/);
+  }
   const saved = { ...input, id: "saved", entity: "URS" };
   const merged = directory.mergeOfferedPlans([saved]);
   assert.equal(merged.filter((plan) => plan.entity === "URS" && plan.accountType === "401k plan").length, 1);
-  assert.ok(merged.includes(saved));
+  assert.ok(merged.some((plan) => plan.id === saved.id));
+});
+
+test("Principal includes supplied contacts and the employer confirmation instruction", () => {
+  const principal = directory.mergeOfferedPlans([]).find((plan) => plan.entity === "Principal");
+  assert.equal(principal.accountType, "401k plan");
+  assert.match(principal.administrator, /Principal Life Insurance Co\./);
+  assert.match(principal.administrator, /PO Box 9394\nDes Moines, IA 50306-9394/);
+  assert.match(principal.administrator, /800-986-3343/);
+  assert.match(principal.administrator, /866-704-3481/);
+  assert.match(principal.administrator, /expressemail@principal.com/);
+  assert.match(principal.notes, /Always call the employer or Principal/);
+  assert.match(principal.notes, /formal plan name/);
+  assert.match(principal.notes, /where to send the certified QDRO/);
+});
+
+test("Fidelity includes contact details and segregation guidance", () => {
+  const fidelity = directory.mergeOfferedPlans([]).find((plan) => plan.entity === "Fidelity");
+  assert.match(fidelity.administrator, /QDRO Administration Group/);
+  assert.match(fidelity.administrator, /P\.O\. Box 770001\nCincinnati, OH 45277-0066/);
+  assert.match(fidelity.administrator, /800-343-0860/);
+  assert.match(fidelity.administrator, /877-665-4284/);
+  assert.match(fidelity.notes, /June 30, 2025/);
+  assert.match(fidelity.notes, /Segregation Date/);
+  assert.match(fidelity.notes, /https:\/\/qdro\.fidelity\.com/);
+  assert.match(fidelity.notes, /Double-check by phone/);
+  const saved = directory.mergeOfferedPlans([{ ...input, id: "saved-fidelity", administrator: "If Fidelity is the administrator:\nFidelity Investments\nCustom contact" }]).find((plan) => plan.id === "saved-fidelity");
+  assert.equal(saved.administrator, "Fidelity Investments\nCustom contact");
 });
