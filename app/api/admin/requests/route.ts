@@ -1,3 +1,4 @@
+import { normalizePartyNames } from "@/lib/field-format";
 import { NextResponse } from "next/server";
 import { requireAdminRequest } from "@/lib/admin-api";
 import { getRequesterIdentity } from "@/lib/ai-intake";
@@ -169,7 +170,7 @@ function normalizeStatus(status: unknown): RequestStatus {
 
 function normalizeFields(fields: unknown) {
   if (!fields || typeof fields !== "object") return {};
-  return fields as Record<string, string | boolean>;
+  return normalizePartyNames(fields as Record<string, string | boolean>);
 }
 
 function normalizeFiles(files: unknown) {

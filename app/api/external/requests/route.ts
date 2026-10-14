@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { normalizeAllCapsName, normalizePartyNames } from "@/lib/field-format";
 import { requestStatuses, type PaymentState, type QdroRequest, type RequestFile, type RequestNote, type RequestStatus, type SignatureState } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -200,7 +201,7 @@ function buildExternalUpdate(body: ExternalWriteRequest, currentNotes: RequestNo
   if (body.clientName !== undefined) {
     const clientName = sanitizeTextValue(body.clientName, 200);
     if (!clientName) throw new Error("clientName cannot be blank.");
-    update.clientName = clientName;
+    update.clientName = normalizeAllCapsName(clientName);
   }
 
   if (body.clientEmail !== undefined) {
@@ -262,11 +263,11 @@ function buildExternalUpdate(body: ExternalWriteRequest, currentNotes: RequestNo
 function filterOwnerWritableFields(fields: ExternalWriteRequest["fields"]) {
   if (!fields || typeof fields !== "object") return {};
 
-  return Object.fromEntries(
+  return normalizePartyNames(Object.fromEntries(
     Object.entries(fields)
       .filter(([key]) => !ownerBlockedFieldPatterns.some((pattern) => pattern.test(key)))
       .map(([key, value]) => [key, typeof value === "boolean" ? value : sanitizeTextValue(value, 2000)])
-  );
+  ));
 }
 
 function sanitizeTextValue(value: unknown, maxLength: number) {

@@ -1,3 +1,4 @@
+import { normalizePartyNames } from "@/lib/field-format";
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { findUtahCourt } from "@/lib/utah-courts";
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     const decoded = await auth.verifyIdToken(token);
     const body = (await req.json()) as SubmitRequest;
     const requestId = sanitizeRequestId(body.requestId || `QDRO-AI-${Date.now()}`);
-    const submittedFields = body.fields || {};
+    const submittedFields = normalizePartyNames(body.fields || {});
     const court = typeof submittedFields.court_location === "string" ? findUtahCourt(submittedFields.court_location) : null;
     const fields: Record<string, string | boolean> = {
       ...submittedFields,

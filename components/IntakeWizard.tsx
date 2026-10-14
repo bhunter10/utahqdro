@@ -11,7 +11,7 @@ import {
 import { doc, setDoc } from "firebase/firestore";
 import { getRequesterIdentity, getRequesterRoleHint, type AiUploadedFile } from "@/lib/ai-intake";
 import { demoRequest, intakeSteps, qdroConsentText } from "@/lib/content";
-import { formatFieldOptionLabel, formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
+import { normalizePartyNames, formatFieldOptionLabel, formatPhoneInput, formatSsnInput, isSsnFieldId } from "@/lib/field-format";
 import { auth, db, hasFirebaseConfig } from "@/lib/firebase";
 import type { IntakeField, QdroRequest, RequestFile } from "@/lib/types";
 import { findUtahCourt } from "@/lib/utah-courts";
@@ -307,7 +307,7 @@ export function IntakeWizard() {
         paymentState: "pending",
         signatureState: "not_started",
         templateFamily: String(data.plan_family || "Other"),
-        fields: data,
+        fields: normalizePartyNames(data),
         files,
         notes: [
           {

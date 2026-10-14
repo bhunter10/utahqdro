@@ -1,4 +1,5 @@
 import { intakeSteps } from "./content";
+import { normalizeAllCapsName } from "./field-format";
 import type { IntakeField } from "./types";
 
 export type AiFieldConfidence = "found" | "review" | "missing";
@@ -102,20 +103,20 @@ function normalizeDateValue(value: string) {
 export function getRequesterIdentity(fields: Record<string, string | boolean | undefined>, fallbackEmail = "") {
   if (fields.requester_role === "I am requesting this for someone else") {
     return {
-      name: String(fields.requester_name || "Requester"),
+      name: normalizeAllCapsName(String(fields.requester_name || "Requester")),
       email: String(fields.requester_email || fallbackEmail)
     };
   }
 
   if (fields.requester_role === "I am the second name listed in the court case title") {
     return {
-      name: String(fields.party2_name || "New client"),
+      name: normalizeAllCapsName(String(fields.party2_name || "New client")),
       email: String(fields.party2_email || fallbackEmail)
     };
   }
 
   return {
-    name: String(fields.party1_name || "New client"),
+    name: normalizeAllCapsName(String(fields.party1_name || "New client")),
     email: String(fields.party1_email || fallbackEmail)
   };
 }

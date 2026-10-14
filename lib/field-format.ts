@@ -1,3 +1,18 @@
+export function normalizePartyNames<T extends Record<string, string | boolean>>(fields: T): T {
+  const normalized = { ...fields };
+  for (const key of ["party1_name", "party2_name"]) {
+    if (typeof normalized[key] === "string") {
+      Object.assign(normalized, { [key]: normalizeAllCapsName(normalized[key]) });
+    }
+  }
+  return normalized;
+}
+
+export function normalizeAllCapsName(value: string) {
+  if (value !== value.toUpperCase() || value === value.toLowerCase()) return value;
+  return value.toLowerCase().replace(/(^|[^\p{L}])\p{L}/gu, (letter) => letter.toUpperCase());
+}
+
 export function isSsnFieldId(fieldId: string) {
   return fieldId.endsWith("_ssn") || fieldId.toLowerCase().includes("ssn");
 }

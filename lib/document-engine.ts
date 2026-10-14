@@ -1,7 +1,7 @@
 import { selectTemplate, selectTemplateFromList } from "./template-matching";
 export { selectTemplate, selectTemplateFromList } from "./template-matching";
 import { documentTemplates } from "./content";
-import { formatLongDate } from "./field-format";
+import { formatLongDate, normalizeAllCapsName } from "./field-format";
 import type { DocumentTemplate, QdroRequest } from "./types";
 import { findUtahCourt } from "./utah-courts";
 
@@ -15,8 +15,8 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
   const court = findUtahCourt(value(request.fields, "court_location"));
   const owner = normalizePartyChoice(value(request.fields, "account_owner")) || "Party 1";
   const awardee = normalizePartyChoice(value(request.fields, "account_awardee")) || (owner === "Party 2" ? "Party 1" : "Party 2");
-  const party1Name = value(request.fields, "party1_name");
-  const party2Name = value(request.fields, "party2_name");
+  const party1Name = normalizeAllCapsName(value(request.fields, "party1_name"));
+  const party2Name = normalizeAllCapsName(value(request.fields, "party2_name"));
   const party1 = {
     name: party1Name,
     ssn: value(request.fields, "party1_ssn"),
@@ -55,7 +55,7 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
 
   return {
     case_number: value(request.fields, "case_number"),
-    district: (court?.district || value(request.fields, "district") || "FOURTH").toUpperCase(),
+    district: (court?.district || value(request.fields, "district")).toUpperCase(),
     court_county: (court?.county || value(request.fields, "court_county")).toUpperCase(),
     judge_name: value(request.fields, "judge_name"),
     marriage_date: formatLongDate(value(request.fields, "marriage_date")),
@@ -67,7 +67,7 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     }).format(new Date()),
     order_title: getOrderTitle(request, amendedText),
     order_reference: `${amendedText ? `${amendedText} ` : ""}Order`,
-    counsel_for: request.clientName,
+    counsel_for: normalizeAllCapsName(request.clientName),
     requesting_full_name: value(request.fields, "requester_name") || request.clientName,
     party1_name: party1Name,
     party1_name_upper: party1Name.toUpperCase(),
