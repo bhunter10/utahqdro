@@ -10,6 +10,7 @@ import { auth, missingFirebaseConfig } from "@/lib/firebase";
 import type { DocumentTemplate, IntakeField, QdroRequest, RequestFile, RequestStatus } from "@/lib/types";
 import { findUtahCourt } from "@/lib/utah-courts";
 import { DocumentPreview } from "./DocumentPreview";
+import { PlanLookup } from "./PlanLookup";
 import type { GeneratedDocumentFormat, GeneratedDocumentType } from "@/lib/generated-documents";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 
@@ -54,11 +55,12 @@ const adminFieldGroups = [
   { id: "admin-document", title: "Admin document fields", fields: adminDocumentFields }
 ];
 
-type AdminTab = "requests" | "fields" | "templates";
+type AdminTab = "requests" | "fields" | "templates" | "plans";
 type AdminAccessState = "checking" | "allowed" | "denied" | "error";
 type AdminUploadType = "certified_qdro" | "approval_letter" | "appearance_of_counsel" | "withdrawal_of_counsel";
 
 function adminTabFromPath(pathname: string): AdminTab {
+  if (pathname.startsWith("/admin/plans")) return "plans";
   if (pathname.startsWith("/admin/fields")) return "fields";
   if (pathname.startsWith("/admin/templates")) return "templates";
   return "requests";
@@ -604,9 +606,13 @@ export function AdminClient() {
             <button className={`button ${tab === "templates" ? "primary" : "secondary"}`} onClick={() => navigateToTab("templates")} type="button">
               Templates
             </button>
+            <button className={`button ${tab === "plans" ? "primary" : "secondary"}`} onClick={() => navigateToTab("plans")} type="button">
+              Plan Lookup
+            </button>
           </div>
         </div>
 
+        {adminAccess === "allowed" && tab === "plans" && adminUser && <PlanLookup key={adminUser.uid} user={adminUser} />}
         {adminAccess === "allowed" && tab === "requests" && (
           <section className="panel admin-request-panel">
             <div className="admin-list-head">
