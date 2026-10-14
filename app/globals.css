@@ -1902,6 +1902,11 @@ th {
   line-height: 1.5;
 }
 
+.preview-document > section {
+  max-width: 8.5in;
+  margin: 0 auto;
+}
+
 .preview-document table {
   max-width: 100%;
   min-width: 0;

@@ -34,7 +34,6 @@ export const fidelityHtmlTemplate = `
     David J. Hunter (9015)<br />
     3915 Timpview Dr., Provo, UT 84604<br />
     801-473-4444 help@utahqdro.com<br />
-    <br />
     <em>Counsel for {{counsel_for}}</em>
   <br>
 

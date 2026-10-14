@@ -465,10 +465,39 @@ function inlineDocumentStyles(html: string) {
     .replace(/<p class="court-footer">/g, `<p style="${footerStyle}">`);
 }
 
+// Shared caption styling mirrors the QDRO header and stays inline for Google Docs.
+const supplementalCaptionText = "font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;";
+const supplementalCaptionStyles = {
+  headingTable: "border-collapse: collapse; border: none; margin: 12pt 0; width: 100%; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;",
+  headingLine: "border: none; padding: 0; text-align: center; text-transform: uppercase;",
+  table: `width: 100%; border-collapse: collapse; table-layout: fixed; border-left: none; border-right: none; margin: 0 0 12pt; ${supplementalCaptionText}`,
+  parties: `width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: 1px solid #000000; padding: 18pt 12pt 18pt 0; vertical-align: top; ${supplementalCaptionText}`,
+  details: `width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: none; padding: 18pt 0 18pt 14pt; vertical-align: top; ${supplementalCaptionText}`,
+  intro: "margin: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;",
+  party: "margin: 0; text-transform: uppercase; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;",
+  title: `margin: 0 0 18pt; ${supplementalCaptionText}`,
+  line: `margin: 0; ${supplementalCaptionText}`
+};
+
+function inlineSupplementalCaptionStyles(html: string) {
+  return html
+    .replace(/<table class="court-heading-table">/g, `<table cellpadding="0" cellspacing="0" style="${supplementalCaptionStyles.headingTable}">`)
+    .replace(/<td class="court-heading-line">/g, `<td style="${supplementalCaptionStyles.headingLine}">`)
+    .replace(/<table class="court-caption">/g, `<table cellpadding="0" cellspacing="0" style="${supplementalCaptionStyles.table}">`)
+    .replace(/<td class="caption-parties">/g, `<td style="${supplementalCaptionStyles.parties}">`)
+    .replace(/<td class="caption-details">/g, `<td style="${supplementalCaptionStyles.details}">`)
+    .replace(/<p class="caption-intro">/g, `<p style="${supplementalCaptionStyles.intro}">`)
+    .replace(/<div class="caption-party">/g, `<div style="${supplementalCaptionStyles.party}">`)
+    .replace(/<p class="caption-title">/g, `<p style="${supplementalCaptionStyles.title}">`)
+    .replace(/<div class="caption-line">/g, `<div style="${supplementalCaptionStyles.line}">`);
+}
+
 function inlineAppearanceDocumentStyles(html: string) {
+  html = inlineSupplementalCaptionStyles(html);
   const baseText = "font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;";
   const appearanceStyles = {
     section: `box-sizing: border-box; ${baseText}`,
+    attorney: `margin: 0; ${baseText}`,
     paragraph: `margin: 0 0 12pt; ${baseText}`,
     body: `margin: 0 0 12pt; ${baseText}`,
     serviceCertificate: `margin: 0 0 12pt; padding-top: 12pt; ${baseText}`,
@@ -486,7 +515,7 @@ function inlineAppearanceDocumentStyles(html: string) {
 
   return html
     .replace(/<section class="supplemental-document">/g, `<section style="${appearanceStyles.section}">`)
-    .replace(/<p class="attorney-block">/g, `<p style="${appearanceStyles.paragraph}">`)
+    .replace(/<p class="attorney-block">/g, `<p style="${appearanceStyles.attorney}">`)
     .replace(/<p class="counsel-line">/g, `<p style="${appearanceStyles.paragraph}">`)
     .replace(/<p class="caption-spacer">/g, `<p style="${appearanceStyles.spacer}">`)
     .replace(/<p class="body-text">/g, `<p style="${appearanceStyles.body}">`)
@@ -503,9 +532,11 @@ function inlineAppearanceDocumentStyles(html: string) {
 }
 
 function inlineWithdrawalDocumentStyles(html: string) {
+  html = inlineSupplementalCaptionStyles(html);
   const baseText = "font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;";
   const withdrawalStyles = {
     section: `box-sizing: border-box; ${baseText}`,
+    attorney: `margin: 0; ${baseText}`,
     paragraph: `margin: 0 0 12pt; ${baseText}`,
     body: `margin: 0 0 12pt; ${baseText}`,
     serviceCertificate: `margin: 0 0 12pt; padding-top: 12pt; ${baseText}`,
@@ -526,7 +557,7 @@ function inlineWithdrawalDocumentStyles(html: string) {
 
   return html
     .replace(/<section class="supplemental-document">/g, `<section style="${withdrawalStyles.section}">`)
-    .replace(/<p class="attorney-block">/g, `<p style="${withdrawalStyles.paragraph}">`)
+    .replace(/<p class="attorney-block">/g, `<p style="${withdrawalStyles.attorney}">`)
     .replace(/<p class="counsel-line">/g, `<p style="${withdrawalStyles.paragraph}">`)
     .replace(/<p class="caption-spacer">/g, `<p style="${withdrawalStyles.spacer}">`)
     .replace(/<p class="body-text">/g, `<p style="${withdrawalStyles.body}">`)
@@ -611,7 +642,7 @@ function inlineAddendumDocumentStyles(html: string) {
 function inlineSupplementalDocumentStyles(html: string, options: { lineHeight?: string } = {}) {
   const lineHeight = options.lineHeight || "16pt";
   const paragraphStyle = `margin: 0 0 12pt; line-height: ${lineHeight}; font-family: Times New Roman; font-size: 12pt; color: #000000;`;
-  const attorneyStyle = `margin: 0 0 12pt; line-height: ${lineHeight}; font-family: Times New Roman; font-size: 12pt; color: #000000;`;
+  const attorneyStyle = `margin: 0; line-height: ${lineHeight}; font-family: Times New Roman; font-size: 12pt; color: #000000;`;
   const counselStyle = `margin: 0 0 12pt; line-height: ${lineHeight}; font-family: Times New Roman; font-size: 12pt; color: #000000;`;
   const bodyStyle = `margin: 12pt 0 12pt; line-height: ${lineHeight}; font-family: Times New Roman; font-size: 12pt; color: #000000;`;
   const serviceStyle = `margin: 12pt 0 12pt; line-height: ${lineHeight}; font-family: Times New Roman; font-size: 12pt; color: #000000;`;
@@ -701,7 +732,6 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
   return `<p style="margin: 0 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000;">David J. Hunter (9015)<br />
     3915 Timpview Dr., Provo, UT 84604<br />
     801-473-4444 help@utahqdro.com<br />
-    <br />
     <em>Counsel for ${merge("counsel_for")}</em>
   </p>
 
