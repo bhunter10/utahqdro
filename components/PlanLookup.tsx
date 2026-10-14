@@ -147,7 +147,7 @@ export function PlanLookup({ user }: { user: User }) {
             <dt>Plan name</dt><dd>{selectedPlan.name || "Not recorded yet"}</dd>
             <dt>Plan administrator</dt><dd style={{ whiteSpace: "pre-line" }}>{selectedPlan.administrator || "Not recorded yet"}</dd>
             {selectedPlan.notes && <><dt>Notes / alternate names</dt><dd style={{ whiteSpace: "pre-line" }}>{selectedPlan.notes}</dd></>}
-            <dt>QDRO template</dt><dd>{matchedPlanTemplate(selectedPlan).name}</dd>
+            <dt>QDRO template</dt><dd>{["FERS", "CSRS", "Corning"].includes(selectedPlan.entity) ? "No dedicated template available" : matchedPlanTemplate(selectedPlan).name}</dd>
           </dl>
           <button type="button" className="button secondary" disabled={saving} onClick={() => { detailDialog.current?.close(); setEditingId(selectedPlan.id.startsWith("offered-") ? "" : selectedPlan.id); setDraft({ ...selectedPlan, accountType: planAccountTypes.includes(selectedPlan.accountType) ? selectedPlan.accountType : "" }); setMessage(""); setEditingInModal(true); setShowForm(true); }}>Edit plan</button>
         </>}

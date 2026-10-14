@@ -2,7 +2,7 @@ import { selectTemplateFromList } from "./template-matching";
 import { documentTemplates, intakeSteps } from "./content";
 
 const fields = intakeSteps.flatMap((step) => step.fields);
-export const planEntities = (fields.find((field) => field.id === "plan_family")?.options || []).filter((option) => option !== "Other");
+export const planEntities = [...new Set([...(fields.find((field) => field.id === "plan_family")?.options || []).filter((option) => option !== "Other"), "FERS", "CSRS", "Corning"])];
 export const planAccountTypes = (fields.find((field) => field.id === "account_type")?.options || []).filter((option) => option !== "Other");
 
 export type PlanEntry = {
@@ -36,6 +36,43 @@ export function validatePlan(value: unknown): Omit<PlanEntry, "id"> | null {
 
 // Supplied contact details for plans supported by the lookup.
 function offeredPlanDetails(entity: string, accountType: string) {
+  if (entity === "Corning") {
+    return {
+      name: "Corning Incorporated Pension Plan",
+      administrator: "Corning Incorporated Benefits Committee\nOne Riverfront Plaza MP-HQ-01-E24\nCorning, NY 14831\nPhone: 607-974-3966",
+      notes: "Plan type: Defined Benefit Plan.\n\nCompany: Corning Incorporated (Corning Company)\nOne Riverfront Plaza\nCorning, NY 14831\nPhone: 607-974-3966"
+    };
+  }
+  if (entity === "FERS" || entity === "CSRS") {
+    return {
+      name: entity === "FERS" ? "Federal Employees Retirement System (FERS)" : "Civil Service Retirement System (CSRS)",
+      administrator: "U.S. Office of Personnel Management\nRetirement Services Program\nCourt Ordered Benefits Branch\nPost Office Box 17\nWashington, DC 20044-0017\nPhone: 1-888-767-6738 (ask to be transferred to the Court Ordered Benefits Branch)",
+      notes: [
+        "Part 1 — Court-ordered benefits (supplied reference notes): A court order may divide a CSRS or FERS benefit following divorce, legal separation, or annulment. The order must expressly direct OPM to pay a portion of monthly benefits, stated as a fixed amount, percentage, fraction, or formula readily calculable from the order and OPM’s files. The amount cannot exceed the retiree’s benefit after tax and insurance deductions.",
+        "Payments from the retiree’s annuity end at the retiree’s death. Continuing payments require a survivor annuity elected by the retiree or provided by court order. An order may award all or part of a refund of employee contributions. To block a refund, the order must direct OPM not to pay it and also grant a survivor annuity or a portion of the retiree’s annuity to a legally separated or former spouse.",
+        "Part 2 — Application: The former spouse must apply in writing; no special form is required. A representative may apply for an incompetent former spouse. Unless the order is already on file with OPM, include a court-certified copy of the order directing payment and other documents issued in the court action. Include certification by the former spouse or representative that the order remains in force and has not been amended, superseded, or set aside.",
+        "Provide the employee’s or retiree’s full name, retirement claim number (if known), date of birth, and Social Security number, plus the applicant’s current address and the employee’s address if not retired or deceased. If payments terminate upon remarriage, include a statement that remarriage has not occurred. Mail the application materials to the Court Ordered Benefits Branch at the address above.",
+        "Part 3 — Prior case experience: A FERS submission was rejected because a copy of the divorce decree was needed and the certified order needed a raised seal or gold seal. Confirm the required supporting documents and certification with OPM for the specific case."
+      ].join("\n\n")
+    };
+  }
+  if (entity === "Transamerica") {
+    return {
+      name: "Transamerica",
+      administrator: "Transamerica\nQDRO Consultants\n3071 Pearl Road\nMedina, OH 44256\nFax: 1-330-722-2735",
+      notes: ""
+    };
+  }
+  if (entity === "Vanguard") {
+    return {
+      name: "Vanguard",
+      administrator: "",
+      notes: [
+        "Note 1: Vanguard treats silence in the QDRO about interest, gains, and losses as including them. The default is to include gains and losses unless the order explicitly states that they shall not be included.",
+        'Note 2: If an employee has been terminated, the rights of a terminated participant apply. Section 3, Paragraph 2: “Pursuant to the terms of the Plan, the Alternate Payee shall be entitled to all the rights and privileges that are afforded to terminated participants within the Plan.”'
+      ].join("\n\n")
+    };
+  }
   if (entity === "Fidelity") {
     return {
       name: "Fidelity",
@@ -91,7 +128,7 @@ function offeredPlanDetails(entity: string, accountType: string) {
 // Use existing offerings without assuming a provider is the legal administrator.
 export const offeredPlans: PlanEntry[] = planEntities.flatMap((entity) => {
   const templates = documentTemplates.filter((template) => template.active && !template.family.startsWith("Supplemental:") && (template.planFamilies || [template.family]).includes(entity));
-  const types = templates.some((template) => !template.accountTypes?.length)
+  const types = ["FERS", "CSRS", "Corning"].includes(entity) ? ["Pension"] : templates.some((template) => !template.accountTypes?.length)
     ? planAccountTypes
     : [...new Set(templates.flatMap((template) => template.accountTypes || []))];
   return (types.length ? types : [""]).map((accountType) => ({

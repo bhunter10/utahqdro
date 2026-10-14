@@ -102,7 +102,7 @@ test("editing a built-in offering creates a saved record, then updates that reco
 
 test("existing offerings appear without saved records and saved details replace their offering", () => {
   const offered = directory.mergeOfferedPlans([]);
-  assert.equal(offered.length, 4);
+  assert.equal(offered.length, 7);
   assert.ok(offered.some((plan) => plan.entity === "URS" && plan.accountType === "Pension"));
   assert.ok(offered.filter((plan) => plan.entity === "Fidelity").every((plan) => plan.administrator.startsWith("Fidelity Investments\n")));
   const savings = offered.find((plan) => plan.entity === "URS" && plan.accountType === "401k plan");
