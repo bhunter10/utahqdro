@@ -888,7 +888,8 @@ function renderMergedValue(valueToRender: string, highlight = false, mergeTag = 
   const escapedValue = escapeHtml(valueToRender);
   if (!highlight) return escapedValue;
   const escapedMergeTag = escapeHtml(mergeTag);
-  return `<mark class="merge-highlight" data-merge-tag="{{${escapedMergeTag}}}" style="background: #fef08a; color: #000000; padding: 0 2px;">${escapedValue || "&nbsp;"}</mark>`;
+  const missing = !valueToRender.trim();
+  return `<mark class="merge-highlight${missing ? " merge-highlight-missing" : ""}" data-merge-tag="{{${escapedMergeTag}}}" style="background: ${missing ? "#ef4444" : "#fef08a"}; color: #000000; padding: 0 2px;">${missing ? "&nbsp;" : escapedValue}</mark>`;
 }
 
 function stripHtml(valueToStrip: string) {

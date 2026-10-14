@@ -67,6 +67,7 @@ export async function POST(req: Request) {
 function canRemoveFile(file: { id?: unknown }) {
   const id = typeof file.id === "string" ? file.id : "";
   return (
+    id.startsWith("admin-generated-") ||
     id.startsWith("admin-certified_qdro-") ||
     id.startsWith("admin-approval_letter-") ||
     id.startsWith("admin-appearance_of_counsel-") ||

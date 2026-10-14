@@ -1841,11 +1841,22 @@ th {
   transform: translateY(-2px);
 }
 
+.preview-document .merge-highlight-missing::after {
+  border-color: #b91c1c;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .preview-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.preview-actions .document-attachment-format {
+  width: auto;
+  min-width: 80px;
 }
 
 .document-preview-tabs {

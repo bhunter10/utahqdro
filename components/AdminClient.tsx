@@ -10,6 +10,7 @@ import { auth, missingFirebaseConfig } from "@/lib/firebase";
 import type { DocumentTemplate, IntakeField, QdroRequest, RequestFile, RequestStatus } from "@/lib/types";
 import { findUtahCourt } from "@/lib/utah-courts";
 import { DocumentPreview } from "./DocumentPreview";
+import type { GeneratedDocumentFormat, GeneratedDocumentType } from "@/lib/generated-documents";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 
 const derivedRequestFieldIds = new Set(["amended_text", "court_county", "district", "prepared_for", "date_certified_sent_to_admin", "total"]);
@@ -32,6 +33,27 @@ const adminDocumentFields: IntakeField[] = [
     help: "Internal tracking date for when the certified order was sent to the plan administrator."
   }
 ];
+// Intake controls outside the main step schema also belong in the field directory.
+const additionalIntakeFields: IntakeField[] = [
+  { id: "is_ira", label: "Is this account an IRA?", type: "radio", required: true, options: ["Yes", "No"], help: "Determines whether IRA administrator confirmation is needed." },
+  { id: "ira_admin_confirmed", label: "IRA administrator confirmed", type: "radio", required: true, options: ["Yes", "No"], conditional: { field: "is_ira", equals: "Yes" }, help: "Whether the IRA administrator confirmed that a QDRO is required." },
+  { id: "billing_name", label: "Billing full name", type: "text", required: true, help: "Full name of the person paying for the request." },
+  { id: "billing_email", label: "Billing email", type: "email", required: true, help: "Email address where the payment receipt is sent." },
+  { id: "billing_address_street", label: "Billing street address", type: "text", required: true },
+  { id: "billing_address_line2", label: "Billing address line 2", type: "text" },
+  { id: "billing_address_city", label: "Billing city", type: "text", required: true },
+  { id: "billing_address_state", label: "Billing state", type: "select", required: true },
+  { id: "billing_address_zip", label: "Billing zip code", type: "text", required: true },
+  { id: "payment_option", label: "Payment options", type: "radio", required: true, options: ["full", "split"], help: "Payment in full ($550) or half paid by each party ($275 each)." },
+  { id: "engagement_terms_agreed", label: "Engagement terms agreement", type: "checkbox", required: true, help: "Records the client's acceptance of the engagement terms." },
+  { id: "client_signature", label: "Client signature", type: "text", required: true, help: "Signature drawn by the client when accepting the engagement terms." }
+];
+const adminFieldGroups = [
+  ...intakeSteps,
+  { id: "additional-intake", title: "Readiness, billing, and consent", fields: additionalIntakeFields },
+  { id: "admin-document", title: "Admin document fields", fields: adminDocumentFields }
+];
+
 type AdminTab = "requests" | "fields" | "templates";
 type AdminAccessState = "checking" | "allowed" | "denied" | "error";
 type AdminUploadType = "certified_qdro" | "approval_letter" | "appearance_of_counsel" | "withdrawal_of_counsel";
@@ -437,6 +459,23 @@ export function AdminClient() {
     router.push(`/admin/${nextTab}`);
   }
 
+  async function attachGeneratedDocument(request: QdroRequest, documentType: GeneratedDocumentType, format: GeneratedDocumentFormat) {
+    const token = await getAdminToken();
+    if (!token) throw new Error("Sign in as an admin to attach documents.");
+    const response = await fetch("/api/admin/generated-document", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ requestId: request.id, fields: request.fields, templateFamily: request.templateFamily, documentType, format })
+    });
+    const result = await response.json() as { message?: string; file?: RequestFile };
+    if (!response.ok || !result.file) throw new Error(result.message || "Could not attach document.");
+    // Merge only the new attachment so generation never discards unsaved form edits.
+    const file = result.file;
+    setRequests((current) => current.map((item) => item.id === request.id
+      ? { ...item, files: [...item.files, file] } : item));
+    return result.message || "Document attached.";
+  }
+
   async function saveTemplateChanges(templateId: string, htmlBody: string) {
     const token = await getAdminToken();
     if (!token) {
@@ -555,10 +594,6 @@ export function AdminClient() {
       <main className="page admin-page">
         <section className="section admin-shell">
           <div className="section-head">
-          <div>
-            <div className="eyebrow">Admin</div>
-            <h1>{tab === "fields" ? "Fields" : tab === "templates" ? "Templates" : "Requests"}</h1>
-          </div>
           <div className="nav-actions">
             <button className={`button ${tab === "requests" ? "primary" : "secondary"}`} onClick={() => navigateToTab("requests")} type="button">
               Requests
@@ -621,31 +656,28 @@ export function AdminClient() {
               <div>
                 <span className="status info">Form schema</span>
                 <h2 style={{ marginTop: 12 }}>Admin-managed intake fields</h2>
-                <p>Fields include labels, help text, required flags, sensitivity, options, and conditional display rules.</p>
+                <p>All intake fields, including readiness, billing, consent, and signature, plus admin document fields. Each entry shows its name, label, and display rules.</p>
               </div>
-              <button className="button secondary" type="button">
-                Add field
-              </button>
             </div>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Step</th>
-                    <th>Field</th>
+                    <th>Name</th>
+                    <th>Label</th>
                     <th>Type</th>
-                    <th>Required</th>
                     <th>Conditional</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {intakeSteps.flatMap((step) =>
+                  {adminFieldGroups.flatMap((step) =>
                     step.fields.map((field) => (
                       <tr key={field.id}>
                         <td>{step.title}</td>
+                        <td><code>{field.id}</code></td>
                         <td>{field.label}</td>
-                        <td>{field.type}</td>
-                        <td>{field.required ? "Yes" : "No"}</td>
+                        <td>{field.id === "client_signature" ? "signature" : field.type}</td>
                         <td>{field.conditional ? `${field.conditional.field} = ${field.conditional.equals}` : "None"}</td>
                       </tr>
                     ))
@@ -706,6 +738,7 @@ export function AdminClient() {
             uploadAdminFile={uploadAdminFile}
             removeUploadedFile={removeUploadedFile}
             saveRequestChanges={saveRequestChanges}
+            attachGeneratedDocument={attachGeneratedDocument}
             hasUnsavedChanges={dirtyRequestIds.includes(selected.id)}
             isSaving={savingRequestId === selected.id}
             isUploadingFile={uploadingRequestId === selected.id}
@@ -895,6 +928,7 @@ function RequestDetailModal({
   uploadAdminFile,
   removeUploadedFile,
   saveRequestChanges,
+  attachGeneratedDocument,
   hasUnsavedChanges,
   isSaving,
   isUploadingFile,
@@ -911,6 +945,7 @@ function RequestDetailModal({
   uploadAdminFile: (requestId: string, uploadType: AdminUploadType, files: FileList | null) => Promise<boolean>;
   removeUploadedFile: (requestId: string, file: RequestFile) => Promise<boolean>;
   saveRequestChanges: (request: QdroRequest) => Promise<void>;
+  attachGeneratedDocument: (request: QdroRequest, documentType: GeneratedDocumentType, format: GeneratedDocumentFormat) => Promise<string>;
   hasUnsavedChanges: boolean;
   isSaving: boolean;
   isUploadingFile: boolean;
@@ -955,7 +990,8 @@ function RequestDetailModal({
         </div>
         {showPreview && (
           <div className="request-preview-panel">
-            <DocumentPreview request={request} templates={templates} />
+            <DocumentPreview request={request} templates={templates}
+              onAttachDocument={(documentType, format) => attachGeneratedDocument(request, documentType, format)} />
           </div>
         )}
         <div className="request-modal-grid">
@@ -1122,7 +1158,7 @@ function RequestEditor({
         {request.files.length > 0 && (
           <section className="admin-intake-step">
             <div>
-              <span className="status info">Uploaded documents</span>
+              <span className="status info">Attached documents</span>
             </div>
             <div className="ai-file-list">
               {request.files.map((file) => {
@@ -1137,7 +1173,7 @@ function RequestEditor({
                       {canOpenFile ? (
                         <span className="file-action-row">
                           <button className="muted-link inline-button" type="button" onClick={() => openUploadedFile(request.id, file)}>
-                            Open uploaded file
+                            Open document
                           </button>
                           {canRemoveFile && (
                             <button
@@ -1617,6 +1653,7 @@ function stripHtml(html: string) {
 
 function canRemoveUploadedFile(file: RequestFile) {
   return (
+    file.id.startsWith("admin-generated-") ||
     file.id.startsWith("admin-certified_qdro-") ||
     file.id.startsWith("admin-approval_letter-") ||
     file.id.startsWith("admin-appearance_of_counsel-") ||

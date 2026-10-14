@@ -9,6 +9,7 @@ import {
   renderWithdrawalOfCounselHtml
 } from "@/lib/document-engine";
 import type { DocumentTemplate, QdroRequest } from "@/lib/types";
+import type { GeneratedDocumentFormat, GeneratedDocumentType } from "@/lib/generated-documents";
 
 type PreviewDocumentType = "qdro" | "appearance" | "withdrawal" | "addendum";
 type GoogleDocResult = {
@@ -18,11 +19,16 @@ type GoogleDocResult = {
 
 export function DocumentPreview({
   request,
-  templates
+  templates,
+  onAttachDocument
 }: {
   request: QdroRequest;
   templates?: DocumentTemplate[];
+  onAttachDocument?: (documentType: GeneratedDocumentType, format: GeneratedDocumentFormat) => Promise<string>;
 }) {
+  const [documentFormats, setDocumentFormats] = useState<Partial<Record<PreviewDocumentType, GeneratedDocumentFormat>>>({});
+  const [attachmentStatus, setAttachmentStatus] = useState("");
+  const [isAttaching, setIsAttaching] = useState(false);
   const [googleDocResults, setGoogleDocResults] = useState<Partial<Record<PreviewDocumentType, GoogleDocResult>>>({});
   const [needsGoogleConnection, setNeedsGoogleConnection] = useState(false);
   const [isCreatingGoogleDoc, setIsCreatingGoogleDoc] = useState(false);
@@ -118,6 +124,19 @@ export function DocumentPreview({
     }
   }
 
+  async function attachDocument() {
+    if (!onAttachDocument) return;
+    setIsAttaching(true);
+    setAttachmentStatus("");
+    try {
+      setAttachmentStatus(await onAttachDocument(activeDocument, documentFormats[activeDocument] || "pdf"));
+    } catch (error) {
+      setAttachmentStatus(error instanceof Error ? error.message : "Could not attach document.");
+    } finally {
+      setIsAttaching(false);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="section-head">
@@ -138,6 +157,7 @@ export function DocumentPreview({
               {activeGoogleDoc.status} {activeGoogleDoc.url && <a className="muted-link" href={activeGoogleDoc.url} target="_blank">Open Google Doc</a>}
             </p>
           )}
+          {attachmentStatus && <p className="preview-action-status" role="status">{attachmentStatus}</p>}
         </div>
         <div className="preview-actions">
           <div className="document-preview-tabs" aria-label="Preview document">
@@ -146,7 +166,8 @@ export function DocumentPreview({
                 className={activeDocument === option.id ? "active" : ""}
                 key={option.id}
                 type="button"
-                onClick={() => setActiveDocument(option.id)}
+                disabled={isAttaching}
+                onClick={() => { setActiveDocument(option.id); setAttachmentStatus(""); }}
               >
                 {option.label}
               </button>
@@ -160,6 +181,25 @@ export function DocumentPreview({
           <button className="button secondary" type="button" onClick={createGoogleDoc} disabled={isCreatingGoogleDoc}>
             {isCreatingGoogleDoc ? "Generating..." : "Generate Google Doc"}
           </button>
+          {onAttachDocument && (
+            <>
+              <select
+                className="select document-attachment-format"
+                aria-label="Attachment format"
+                value={documentFormats[activeDocument] || "pdf"}
+                disabled={isAttaching}
+                onChange={(event) => setDocumentFormats((current) => ({
+                  ...current, [activeDocument]: event.target.value as GeneratedDocumentFormat
+                }))}
+              >
+                <option value="pdf">PDF</option>
+                <option value="rtf">RTF</option>
+              </select>
+              <button className="button primary" type="button" onClick={() => void attachDocument()} disabled={isAttaching}>
+                {isAttaching ? "Attaching..." : "Attach document"}
+              </button>
+            </>
+          )}
         </div>
       </div>
       <div className="preview-document" dangerouslySetInnerHTML={{ __html: html }} />
