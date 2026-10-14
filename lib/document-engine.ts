@@ -717,17 +717,30 @@ function humanizeMergeField(field: string) {
 
 function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof deriveDocumentData>, options: { highlightMergeFields?: boolean; wrapBody?: boolean } = {}) {
   const normalizedBody = normalizeDocumentBodyHtml(bodyHtml).trim();
+  // Google Docs drops table margins; put the caption gap on the first body
+  // paragraph instead, without adding a blank paragraph or stacking margins.
+  const exportBody = normalizedBody.replace(/<p\b([^>]*)>/i, (_tag, attributes: string) => {
+    const styled = /style="([^"]*)"/i.test(attributes)
+      ? attributes.replace(/style="([^"]*)"/i, (_style, value: string) => `style="${value}; margin-top: 12pt;"`)
+      : `${attributes} style="margin-top: 12pt;"`;
+    return `<p${styled}>`;
+  });
   const bodySection = options.wrapBody === false
-    ? normalizedBody
-    : `<div class="document-body" style="margin-top: 18pt; margin-bottom: 18pt; color: #000000;">${normalizedBody}</div>`;
-  const captionTableMargin = options.wrapBody === false ? " margin: 0 0 12pt;" : "";
-  const afterCaptionSpacer = options.wrapBody === false
-    ? `<p style="margin: 0 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000;">&nbsp;</p>`
-    : "";
+    ? exportBody
+    : `<div class="document-body" style="margin-top: 12pt; margin-bottom: 18pt; color: #000000;">${normalizedBody}</div>`;
+  const captionTableMargin = " margin: 0;";
   const merge = (key: keyof typeof data) => renderMergedValue(String(data[key] ?? ""), options.highlightMergeFields, key);
   const legalPlanHeading = String(data.legal_plan_heading || "").trim()
     ? `<p style="margin: 0 0 18pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">${merge("legal_plan_heading")}</p>`
     : "";
+
+  const signatureStyles = {
+    table: "width: 100%; border-collapse: collapse; table-layout: fixed; border: none; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;",
+    heading: "margin: 24pt 0 0; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;",
+    name: "width: 60%; border: none; padding: 24pt 12pt 0 0; vertical-align: top;",
+    date: "width: 40%; border: none; padding: 24pt 0 0; vertical-align: top;",
+    line: "margin: 0; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;"
+  };
 
   return `<p style="margin: 0 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000;">David J. Hunter (9015)<br />
     3915 Timpview Dr., Provo, UT 84604<br />
@@ -765,75 +778,26 @@ function renderCommonDocumentShell(bodyHtml: string, data: ReturnType<typeof der
         </td>
       </tr>
     </tbody>
-  </table>${afterCaptionSpacer}${bodySection}<table class="signature-block" style="width: 100%; border-collapse: collapse; table-layout: fixed; border: none; margin-top: 24pt; font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">
+  </table>${bodySection}<p style="${signatureStyles.heading}">Approved as to form:</p>
+  <table class="signature-block" cellpadding="0" cellspacing="0" style="${signatureStyles.table}">
     <colgroup>
-      <col style="width: 50%;" />
-      <col style="width: 50%;" />
+      <col style="width: 60%;" />
+      <col style="width: 40%;" />
     </colgroup>
     <tbody>
       <tr>
-        <td style="width: 50%; border: none; padding: 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
-          <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
-            <tbody>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Approved as to form:_____________________</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">&nbsp;</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">&nbsp;</td>
-              </tr>
-            </tbody>
-          </table>
+        <td style="${signatureStyles.name}">
+          <p style="${signatureStyles.line}">${merge("participant_name")}, ${merge("participant_signature_role")}</p>
+          <p style="${signatureStyles.line}">(Signed Electronically)</p>
         </td>
-        <td style="width: 50%; border: none; padding: 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
-          <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; color: #000000;">
-            <tbody>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; color: #000000;">________________________________</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; color: #000000;">${merge("participant_name")}, ${merge("participant_signature_role")},</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">(Signed Electronically)</td>
-              </tr>
-            </tbody>
-          </table>
-        </td>
+        <td style="${signatureStyles.date}"><p style="${signatureStyles.line}">Date:</p></td>
       </tr>
       <tr>
-        <td style="width: 50%; border: none; padding: 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
-          <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
-            <tbody>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">Approved as to form: ____________________</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">&nbsp;</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">&nbsp;</td>
-              </tr>
-            </tbody>
-          </table>
+        <td style="${signatureStyles.name}">
+          <p style="${signatureStyles.line}">${merge("alternate_payee_name")}, ${merge("alternate_signature_role")}</p>
+          <p style="${signatureStyles.line}">(Signed Electronically)</p>
         </td>
-        <td style="width: 50%; border: none; padding: 0; vertical-align: top; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
-          <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; border: none; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">
-            <tbody>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">________________________________</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">${merge("alternate_payee_name")}, ${merge("alternate_signature_role")},</td>
-              </tr>
-              <tr>
-                <td style="border: none; padding: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;">(Signed Electronically)</td>
-              </tr>
-            </tbody>
-          </table>
-        </td>
+        <td style="${signatureStyles.date}"><p style="${signatureStyles.line}">Date:</p></td>
       </tr>
     </tbody>
   </table>

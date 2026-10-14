@@ -91,7 +91,6 @@ export const fidelityHtmlTemplate = `
       </tr>
     </tbody>
   </table>
-<br>
   <p class="indent">WHEREAS this Court has jurisdiction over Petitioner and Respondent and the subject matter of this Order pursuant to Utah Code 81-1-204; and</p>
   <p class="indent">WHEREAS Petitioner, Respondent and the Court intend that this Order shall be a {{order_title}} (hereinafter referred to as a “QDRO”) as defined in Section 206(d)(3) of the Employee Retirement Income Security Act of 1974, as amended (“ERISA”) and Section 414(p) of the Internal Revenue Code of 1986, as amended (the “Code”); and,</p>
   <p class="indent">WHEREAS, the parties have stipulated that the Court enter this Order, or the Court has determined that this Order shall enter;</p>

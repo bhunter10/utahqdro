@@ -11,6 +11,7 @@ import {
 } from "@/lib/document-engine";
 import { getAdminDb } from "@/lib/firebase-admin";
 import type { DocumentTemplate } from "@/lib/types";
+import { prepareGoogleDocumentHtml } from "@/lib/google-document-html";
 
 type ExportDocumentType = "qdro" | "appearance" | "withdrawal" | "addendum" | "package";
 
@@ -91,7 +92,7 @@ async function createGoogleDocument(request: typeof demoRequest, documentType: E
     `--${boundary}`,
     "Content-Type: text/html; charset=UTF-8",
     "",
-    googleDocHtmlShell(html.trim()),
+    googleDocHtmlShell(prepareGoogleDocumentHtml(html.trim())),
     `--${boundary}--`
   ].join("\r\n");
 

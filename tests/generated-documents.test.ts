@@ -70,14 +70,21 @@ test("court headings have consistent spacing below STATE OF UTAH", () => {
   }
 });
 
-test("approval signature lines fit their RTF cell using an underline tab leader", () => {
-  const rtf = documentHtmlToRtf(renderGeneratedDocumentHtml(demoRequest, "qdro", documentTemplates));
-  const signatureRows = rtf.split("\\trowd").filter((row) => row.includes("Approved as to form:"));
-  assert.equal(signatureRows.length, 2);
-  for (const row of signatureRows) {
-    assert.ok(row.includes("\\tqr\\tlul\\tx4520"));
-    assert.ok(row.includes("Approved as to form:\\tab "));
-    assert.ok(!/Approved as to form:\s*_+/.test(row));
+test("approval section uses one heading and two simple name/date rows", () => {
+  const html = renderGeneratedDocumentHtml(demoRequest, "qdro", documentTemplates);
+  const signature = html.match(/<table class="signature-block"[\s\S]*?<\/table>/)?.[0];
+  assert.ok(signature);
+  assert.equal((html.match(/Approved as to form:/g) || []).length, 1);
+  assert.equal((signature.match(/Date:/g) || []).length, 2);
+  assert.equal((signature.match(/Signed Electronically/g) || []).length, 2);
+  assert.ok(!signature.includes("____"));
+  assert.ok(!signature.includes("<br"));
+  const rtf = documentHtmlToRtf(html);
+  const rows = rtf.split("\\trowd").filter((row) => row.includes("Signed Electronically"));
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.ok(row.includes("Date:"));
+    assert.ok(row.includes("\\brdrnil"));
   }
 });
 
@@ -135,5 +142,90 @@ test("DOCX contains editable template text, tables, and Letter page settings", a
     const styles = await zip.file("word/styles.xml").async("string");
     assert.ok(styles.includes("Times New Roman"), type);
     assert.ok(styles.includes('w:val="24"'), type);
+  }
+});
+
+
+test("Word captions retain equal vertical padding and space at the column divider", async () => {
+  const JSZip = require("jszip");
+  for (const type of ["qdro", "appearance", "withdrawal"] as const) {
+    const zip = await JSZip.loadAsync(await generateDocumentFile(renderGeneratedDocumentHtml(demoRequest, type, documentTemplates), "docx"));
+    const xml = await zip.file("word/document.xml").async("string");
+    const cells: string[] = xml.match(/<w:tc>[\s\S]*?<\/w:tc>/g) || [];
+    const parties = cells.find((cell) => cell.includes("In the Matter of the Marriage of"));
+    const title = { qdro: "QUALIFIED DOMESTIC RELATIONS ORDER", appearance: "LIMITED APPEARANCE OF COUNSEL", withdrawal: "WITHDRAWAL OF COUNSEL" }[type];
+    const details = cells.find((cell) => cell.includes(title));
+    assert.ok(parties, type);
+    assert.ok(details, type);
+    for (const cell of [parties, details]) {
+      assert.ok(cell.includes('<w:top w:w="360" w:type="dxa"/>'), type);
+      assert.ok(cell.includes('<w:bottom w:w="360" w:type="dxa"/>'), type);
+    }
+    assert.ok(parties.includes('<w:right w:w="240" w:type="dxa"/>'), type);
+    assert.ok(details.includes('<w:left w:w="280" w:type="dxa"/>'), type);
+    assert.ok(!cells.filter((cell) => cell.includes("Approved as to form:")).some((cell) => cell.includes("<w:tcMar>")));
+  }
+});
+
+
+test("Google export puts a single caption gap on the first WHEREAS paragraph", () => {
+  const html = renderGeneratedDocumentHtml(demoRequest, "qdro", documentTemplates);
+  const firstParagraph = html.match(/<p[^>]*>WHEREAS this Court[^<]*<\/p>/)?.[0];
+  assert.ok(firstParagraph);
+  assert.ok(firstParagraph.includes("margin-top: 12pt;"));
+  assert.ok(firstParagraph.includes("margin: 0 0 12pt;"));
+  assert.match(html, /<\/table>\s*<p[^>]*>WHEREAS this Court/);
+});
+
+
+test("Google import uses one fixed caption spacer without stacked margins", async () => {
+  const { prepareGoogleDocumentHtml } = await import("../lib/google-document-html");
+  const html = prepareGoogleDocumentHtml(renderGeneratedDocumentHtml(demoRequest, "qdro", documentTemplates));
+  assert.match(html, /<\/table><p style="[^"]*height: 12pt;[^"]*">&nbsp;<\/p><p[^>]*>WHEREAS this Court/);
+  assert.ok(!html.includes("margin-top: 12pt;"));
+  assert.equal((html.match(/padding: 0; height: 12pt;/g) || []).length, 1);
+  assert.equal(prepareGoogleDocumentHtml(html), html);
+});
+
+
+test("Word court headings span the page and first body paragraph clears the caption", async () => {
+  const JSZip = require("jszip");
+  const zip = await JSZip.loadAsync(await generateDocumentFile(renderGeneratedDocumentHtml(demoRequest, "qdro", documentTemplates), "docx"));
+  const xml = await zip.file("word/document.xml").async("string");
+  const headings = (xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g) || []).find((table: string) => table.includes("STATE OF UTAH"));
+  assert.ok(headings);
+  assert.equal((headings.match(/<w:tcW w:w="9360" w:type="dxa"\/>/g) || []).length, 2);
+  const firstWhereas = (xml.match(/<w:p>[\s\S]*?<\/w:p>/g) || []).find((paragraph: string) => paragraph.includes("WHEREAS"));
+  assert.ok(firstWhereas);
+  assert.ok(firstWhereas.includes('w:before="240"'));
+});
+
+
+test("Word captions lock both columns to half the page width", async () => {
+  const JSZip = require("jszip");
+  for (const type of ["qdro", "appearance", "withdrawal"] as const) {
+    const zip = await JSZip.loadAsync(await generateDocumentFile(renderGeneratedDocumentHtml(demoRequest, type, documentTemplates), "docx"));
+    const xml = await zip.file("word/document.xml").async("string");
+    const caption = (xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g) || []).find((table: string) => table.includes("In the Matter of the Marriage of"));
+    assert.ok(caption, type);
+    assert.ok(caption.includes('<w:tblLayout w:type="fixed"/>'), type);
+    assert.equal((caption.match(/<w:gridCol w:w="4680"\/>/g) || []).length, 2, type);
+    assert.equal((caption.match(/<w:tcW w:w="4680" w:type="dxa"\/>/g) || []).length, 2, type);
+  }
+});
+
+
+test("Google appearance and withdrawal use compact headings and one caption gap", async () => {
+  const { prepareGoogleDocumentHtml } = await import("../lib/google-document-html");
+  for (const type of ["appearance", "withdrawal"] as const) {
+    const html = prepareGoogleDocumentHtml(renderGeneratedDocumentHtml(demoRequest, type, documentTemplates));
+    assert.match(html, /<\/table><p style="[^"]*height: 12pt;[^"]*">&nbsp;<\/p><p[^>]*>\s*COMES NOW/);
+    const heading = (html.match(/<table\b[^>]*>[\s\S]*?<\/table>/g) || []).find((table) => table.includes("STATE OF UTAH"));
+    assert.ok(heading);
+    assert.ok(heading.includes("border: none; padding: 0;"));
+    assert.ok(!heading.includes("padding: 0 0 12pt;"));
+    assert.equal((heading.match(/<p style=/g) || []).length, 2);
+    assert.equal((html.match(/padding: 0; height: 12pt;/g) || []).length, 1);
+    assert.equal(prepareGoogleDocumentHtml(html), html);
   }
 });

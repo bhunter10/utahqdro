@@ -29,6 +29,7 @@ export function renderGeneratedDocumentHtml(request: QdroRequest, documentType: 
 export async function generateDocumentFile(html: string, format: GeneratedDocumentFormat): Promise<Buffer> {
   if (format === "docx") {
     const { default: htmlToDocx } = await import("@turbodocx/html-to-docx");
+    const { preserveDocxCaptionPadding } = await import("./document-docx");
     // Use the same inline template styles as Google Docs, with no extra table spacers.
     const document = await htmlToDocx(
       `<html><body style="font-family: Times New Roman; font-size: 12pt; line-height: 14pt; color: #000000;">${html}</body></html>`,
@@ -41,7 +42,7 @@ export async function generateDocumentFile(html: string, format: GeneratedDocume
         decodeUnicode: true
       }
     );
-    return Buffer.from(document as ArrayBuffer);
+    return preserveDocxCaptionPadding(Buffer.from(document as ArrayBuffer));
   }
 
   const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
