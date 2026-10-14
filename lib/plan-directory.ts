@@ -13,12 +13,15 @@ export type PlanEntry = {
   accountType: string;
   notes: string;
   active: boolean;
+  sourceId?: string;
 };
 
 export function planSavePayload(draft: Omit<PlanEntry, "id">, editingId: string) {
   // Drafts can carry a lookup ID at runtime when copied from a selected entry.
-  const { name, administrator, entity, accountType, notes, active } = draft;
-  return { name, administrator, entity, accountType, notes, active, ...(editingId ? { id: editingId } : {}) };
+  const { name, administrator, entity, accountType, notes, active, sourceId } = draft;
+  const lookupId = (draft as PlanEntry).id;
+  const source = sourceId || (lookupId?.startsWith("offered-") ? lookupId : undefined);
+  return { name, administrator, entity, accountType, notes, active, ...(source ? { sourceId: source } : {}), ...(editingId ? { id: editingId } : {}) };
 }
 
 export function validatePlan(value: unknown): Omit<PlanEntry, "id"> | null {
@@ -26,12 +29,14 @@ export function validatePlan(value: unknown): Omit<PlanEntry, "id"> | null {
   const data = value as Record<string, unknown>;
   const text = (key: string, max: number) => typeof data[key] === "string" && (data[key] as string).trim().length <= max ? (data[key] as string).trim() : null;
   const name = text("name", 300);
-  const administrator = text("administrator", 300);
+  const administrator = data.administrator === undefined ? "" : text("administrator", 300);
   const entity = text("entity", 100);
   const accountType = text("accountType", 100);
   const notes = text("notes", 3000);
-  if (!name || !administrator || !entity || !accountType || notes === null || typeof data.active !== "boolean" || !planEntities.includes(entity) || !planAccountTypes.includes(accountType)) return null;
-  return { name, administrator, entity, accountType, notes, active: data.active };
+  const sourceId = data.sourceId === undefined ? undefined : text("sourceId", 128);
+  if (sourceId !== undefined && (!sourceId || !/^offered-[A-Za-z0-9_-]+$/.test(sourceId))) return null;
+  if (!name || administrator === null || !entity || !accountType || notes === null || typeof data.active !== "boolean" || !planEntities.includes(entity) || !planAccountTypes.includes(accountType)) return null;
+  return { name, administrator, entity, accountType, notes, active: data.active, ...(sourceId ? { sourceId } : {}) };
 }
 
 // Supplied contact details for plans supported by the lookup.
@@ -138,6 +143,14 @@ export const offeredPlans: PlanEntry[] = planEntities.flatMap((entity) => {
 });
 
 const namedPlans: PlanEntry[] = [{
+  id: "offered-dmba-intermountain-401k",
+  name: "DMBA Intermountain 401k Plan",
+  administrator: "",
+  entity: "DMBA",
+  accountType: "401k plan",
+  notes: 'If the participant has a loan, Paragraph 1.b. should read:\n\nb. With respect to any distribution from the Plan to the Alternate Payee, the Alternate Payee shall provide such requests for payment, elections and consents to payment and receipts of payment as the Plan’s Administrator may require. The transfer from the Participant’s Account to the Account established for distribution to the Alternate Payee shall be made in the following manner: The Plan’s Administrator shall transfer to the account of the Alternate Payee [________ dollars][________ percent (________%) of all vested assets] of the Participant’s Account. The Participant has an outstanding loan against [his/her] total vested account balance. The loan balance as of [________ (the date of entry of the Decree), shall/shall not] be included in the calculation to segregate funds to the Alternate Payee. [Other transfer or special directions regarding the Participant’s account.]',
+  active: true
+}, {
   id: "offered-tiaa-university-of-utah",
   name: "TIAA – University of Utah",
   administrator: "TIAA\nAttn: QDRO Unit\nP.O. Box 1259\nCharlotte, NC 28201",
@@ -151,8 +164,34 @@ export function mergeOfferedPlans(saved: PlanEntry[]): PlanEntry[] {
   saved = saved.map((plan) => plan.entity === "Fidelity"
     ? { ...plan, administrator: plan.administrator.split(/\r?\n/).filter((line) => line.trim() !== "If Fidelity is the administrator:").join("\n") }
     : plan);
-  const named = namedPlans.filter((plan) => planEntities.includes(plan.entity) && !saved.some((entry) => entry.entity === plan.entity && entry.name === plan.name));
-  return [...offeredPlans.filter((offered) => !saved.some((plan) => plan.entity === offered.entity && plan.accountType === offered.accountType)), ...named, ...saved];
+  const intermountain = namedPlans.find((plan) => plan.id === "offered-dmba-intermountain-401k")!;
+  const isIntermountain = (plan: PlanEntry) => plan.sourceId === intermountain.id || (plan.accountType === "401k plan" && /^dmba\s+intermountain(?:\s+401k(?:\s+plan)?)?$/i.test(plan.name.trim()));
+  const duplicates = saved.filter(isIntermountain);
+  if (duplicates.length) {
+    const first = duplicates.find((plan) => plan.sourceId === intermountain.id) || duplicates[0];
+    const combined = {
+      ...first,
+      sourceId: intermountain.id,
+      administrator: duplicates.find((plan) => plan.administrator.trim())?.administrator || "",
+      notes: [...new Set([...duplicates.map((plan) => plan.notes).filter(Boolean), intermountain.notes])].join("\n\n")
+    };
+    saved = [...saved.filter((plan) => !isIntermountain(plan)), combined];
+  }
+  const tiaa = namedPlans.find((plan) => plan.id === "offered-tiaa-university-of-utah")!;
+  const isUniversityTiaa = (plan: PlanEntry) => plan.sourceId === tiaa.id || (plan.entity === "TIAA" && /^tiaa\s*[-–—]\s*university of utah$/i.test(plan.name.trim()));
+  const tiaaDuplicates = saved.filter(isUniversityTiaa);
+  if (tiaaDuplicates.length) {
+    const first = tiaaDuplicates.find((plan) => plan.sourceId === tiaa.id) || tiaaDuplicates.find((plan) => plan.accountType) || tiaaDuplicates[0];
+    saved = [...saved.filter((plan) => !isUniversityTiaa(plan)), {
+      ...first,
+      sourceId: tiaa.id,
+      administrator: tiaaDuplicates.find((plan) => plan.administrator.trim())?.administrator || tiaa.administrator,
+      notes: [...new Set(tiaaDuplicates.map((plan) => plan.notes).filter(Boolean))].join("\n\n")
+    }];
+  }
+  const named = namedPlans.filter((plan) => planEntities.includes(plan.entity) && !saved.some((entry) =>
+    plan.id === intermountain.id ? isIntermountain(entry) : plan.id === tiaa.id ? isUniversityTiaa(entry) : entry.entity === plan.entity && entry.name === plan.name));
+  return [...offeredPlans.filter((offered) => !saved.some((plan) => plan.sourceId === offered.id || (plan.entity === offered.entity && plan.accountType === offered.accountType))), ...named, ...saved];
 }
 
 export function matchedPlanTemplate(plan: Pick<PlanEntry, "entity" | "accountType">) {

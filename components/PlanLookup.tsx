@@ -59,7 +59,7 @@ export function PlanLookup({ user }: { user: User }) {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Could not save plan.");
-      setPlans((current) => [...current.filter((plan) => plan.id !== result.plan.id && !(plan.id.startsWith("offered-") && plan.entity === result.plan.entity && plan.accountType === result.plan.accountType)), result.plan].sort((a, b) => a.name.localeCompare(b.name)));
+      setPlans((current) => mergeOfferedPlans([...current.filter((plan) => !plan.id.startsWith("offered-") && plan.id !== result.plan.id && !(result.plan.sourceId && plan.sourceId === result.plan.sourceId)), result.plan]));
       setDraft(emptyPlan);
       setEditingId("");
       setShowForm(false);
@@ -95,7 +95,7 @@ export function PlanLookup({ user }: { user: User }) {
           <fieldset disabled={saving || loading} style={{ border: 0, padding: 0 }}>
             <div className="field-grid">
               <label className="field">Formal plan name<input className="input" autoFocus required maxLength={300} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
-              <label className="field">Plan administrator<textarea className="textarea" required maxLength={300} value={draft.administrator} onChange={(event) => setDraft({ ...draft, administrator: event.target.value })} /></label>
+              <label className="field">Plan administrator (optional)<textarea className="textarea" maxLength={300} value={draft.administrator} onChange={(event) => setDraft({ ...draft, administrator: event.target.value })} /></label>
               <label className="field">Entity / provider<select className="select" required value={draft.entity} onChange={(event) => setDraft({ ...draft, entity: event.target.value })}><option value="">Select entity</option>{planEntities.map((value) => <option key={value}>{value}</option>)}</select></label>
               <label className="field">Account type<select className="select" required value={draft.accountType} onChange={(event) => setDraft({ ...draft, accountType: event.target.value })}><option value="">Select type</option>{planAccountTypes.map((value) => <option key={value}>{value}</option>)}</select></label>
               <label className="field full-width">Notes / alternate names<textarea className="textarea" maxLength={3000} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label>

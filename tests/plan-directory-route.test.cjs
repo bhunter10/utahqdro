@@ -54,10 +54,20 @@ test("unauthorized reads and writes never reach the database", async () => {
 
 test("unknown entities, unknown types, empty names, and unsafe IDs are rejected", async () => {
   const route = setup();
-  for (const patch of [{ entity: "Other" }, { accountType: "Unknown" }, { name: "   " }, { administrator: "" }, { id: "bad/path" }, { active: "true" }]) {
+  for (const patch of [{ entity: "Other" }, { accountType: "Unknown" }, { name: "   " }, { administrator: 123 }, { administrator: "a".repeat(301) }, { id: "bad/path" }, { active: "true" }]) {
     assert.equal((await route.put({ ...input, ...patch })).status, 400);
   }
   assert.equal(route.writes.length, 0);
+});
+
+test("plans save with a blank or omitted administrator", async () => {
+  for (const administrator of ["", "   ", undefined]) {
+    const route = setup();
+    const response = await route.put({ ...input, administrator });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).plan.administrator, "");
+    assert.equal(route.writes[0].administrator, "");
+  }
 });
 
 test("create and deactivate preserve the administrator separately from provider", async () => {
@@ -147,4 +157,44 @@ test("Fidelity includes contact details and segregation guidance", () => {
   assert.match(fidelity.notes, /Double-check by phone/);
   const saved = directory.mergeOfferedPlans([{ ...input, id: "saved-fidelity", administrator: "If Fidelity is the administrator:\nFidelity Investments\nCustom contact" }]).find((plan) => plan.id === "saved-fidelity");
   assert.equal(saved.administrator, "Fidelity Investments\nCustom contact");
+});
+
+test("DMBA Intermountain aliases appear once and retain saved details and loan instructions", () => {
+  const entries = directory.mergeOfferedPlans([
+    { ...input, id: "intermountain-1", entity: "DMBA", name: "DMBA Intermountain", notes: "Existing note" },
+    { ...input, id: "intermountain-2", entity: "DMBA", name: "DMBA Intermountain 401k Plan", administrator: "", notes: "" }
+  ]).filter((plan) => plan.name.startsWith("DMBA Intermountain"));
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].name, "DMBA Intermountain");
+  assert.equal(entries[0].id, "intermountain-1");
+  assert.equal(entries[0].administrator, input.administrator);
+  assert.match(entries[0].notes, /Existing note/);
+  assert.match(entries[0].notes, /Paragraph 1\.b\./);
+});
+
+test("TIAA University of Utah entries merge across account types and dash styles", () => {
+  const entries = directory.mergeOfferedPlans([
+    { ...input, id: "tiaa-1", entity: "TIAA", name: "TIAA – University of Utah", accountType: "", administrator: "", notes: "First note" },
+    { ...input, id: "tiaa-2", entity: "TIAA", name: "TIAA - University of Utah", administrator: "", notes: "Second note" }
+  ]).filter((plan) => plan.sourceId === "offered-tiaa-university-of-utah");
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].id, "tiaa-2");
+  assert.equal(entries[0].accountType, "401k plan");
+  assert.match(entries[0].administrator, /QDRO Unit/);
+  assert.match(entries[0].notes, /First note/);
+  assert.match(entries[0].notes, /Second note/);
+});
+
+test("renamed lookup entries preserve their names through save validation and refresh", () => {
+  for (const sourceId of ["offered-dmba-intermountain-401k", "offered-tiaa-university-of-utah", "offered-fidelity-401k-plan"]) {
+    const payload = directory.planSavePayload({ ...input, id: sourceId, name: "My corrected formal plan name" }, "");
+    assert.equal(payload.sourceId, sourceId);
+    const stored = directory.validatePlan(payload);
+    assert.ok(stored);
+    const refreshed = directory.mergeOfferedPlans([{ ...stored, id: "persisted" }]);
+    assert.equal(refreshed.find((plan) => plan.id === "persisted").name, payload.name);
+    assert.equal(refreshed.some((plan) => plan.id === sourceId), false);
+    const again = directory.planSavePayload(refreshed.find((plan) => plan.id === "persisted"), "persisted");
+    assert.equal(again.sourceId, sourceId);
+  }
 });

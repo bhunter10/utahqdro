@@ -26,7 +26,7 @@ export async function PUT(req: Request) {
   }
   const plan = validatePlan(body);
   if (!plan || (body.id !== undefined && (typeof body.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(body.id)))) {
-    return NextResponse.json({ message: "Enter a plan name, administrator, and an offered entity and account type." }, { status: 400 });
+    return NextResponse.json({ message: "Enter a plan name and an offered entity and account type. Plan administrator is optional and must be no more than 300 characters." }, { status: 400 });
   }
   try {
     const ref = body.id ? auth.db.collection("plans").doc(body.id) : auth.db.collection("plans").doc();
