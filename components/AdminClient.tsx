@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useId, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getRequesterIdentity, normalizeAiFieldValue } from "@/lib/ai-intake";
 import { intakeSteps, statuses } from "@/lib/content";
@@ -902,6 +902,27 @@ function FormatButton({
   );
 }
 
+function VisibilityIcon({ hidden }: { hidden: boolean }) {
+  const maskId = useId();
+  return (
+    <svg width="20" height="20" style={{ marginRight: 8, flexShrink: 0 }} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+      {hidden && (
+        <defs>
+          <mask id={maskId}>
+            <rect width="24" height="24" fill="white" />
+            <path d="M3 3 21 21" stroke="black" strokeWidth="5" />
+          </mask>
+        </defs>
+      )}
+      <g mask={hidden ? `url(#${maskId})` : undefined}>
+        <path fillRule="evenodd" d="M1 12C3.5 7.5 7.5 5 12 5s8.5 2.5 11 7c-2.5 4.5-6.5 7-11 7S3.5 16.5 1 12Zm16 0a5 5 0 1 0-10 0 5 5 0 0 0 10 0Z" clipRule="evenodd" />
+        <circle cx="12" cy="12" r="3" />
+      </g>
+      {hidden && <path d="M3 3 21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />}
+    </svg>
+  );
+}
+
 function ListIcon({ ordered }: { ordered: boolean }) {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -958,7 +979,8 @@ function RequestDetailModal({
   removingFileId: string;
   onClose: () => void;
 }) {
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
+  const [showFields, setShowFields] = useState(true);
   const requester = getRequesterIdentity(request.fields, request.clientEmail);
   const clientPartyHeading = getClientPartyHeading(request);
 
@@ -980,27 +1002,34 @@ function RequestDetailModal({
         aria-labelledby="request-modal-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
+        <div className="modal-sticky-header">
         <div className="modal-head">
-          <div>
+          <div className="modal-heading">
             <span className="status info">{getEntityType(request)} · {getAccountType(request)}</span>
-            <h2 id="request-modal-title" style={{ marginTop: 12 }}>{clientPartyHeading || requester.name || request.clientName}</h2>
+            <h2 id="request-modal-title" style={{ marginTop: 6, marginBottom: 0 }}>{clientPartyHeading || requester.name || request.clientName}</h2>
           </div>
           <div className="modal-head-actions">
-            <button className="button secondary" type="button" onClick={() => setShowPreview(!showPreview)}>
-              {showPreview ? "Hide preview" : "Preview documents"}
-            </button>
-            <button className="button secondary" type="button" onClick={onClose} aria-label="Close request detail">
-              Close
+            <button className="modal-close-button" type="button" onClick={onClose} aria-label="Close request detail">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" focusable="false">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
             </button>
           </div>
         </div>
-        {showPreview && (
-          <div className="request-preview-panel">
-            <DocumentPreview request={request} templates={templates}
-              onAttachDocument={(documentType, format) => attachGeneratedDocument(request, documentType, format)} />
-          </div>
-        )}
-        <div className="request-modal-grid">
+        <div className="modal-panel-controls" role="group" aria-label="Visible panels">
+              <button className="button secondary" type="button" aria-expanded={showFields} onClick={() => setShowFields(!showFields)}>
+                <VisibilityIcon hidden={showFields} />
+                {showFields ? "Hide fields" : "Show fields"}
+              </button>
+            <button className="button secondary" type="button" aria-expanded={showPreview} onClick={() => setShowPreview(!showPreview)}>
+              <VisibilityIcon hidden={showPreview} />
+              {showPreview ? "Hide preview" : "Show preview"}
+            </button>
+        </div>
+        </div>
+        <div className={`request-modal-grid${showPreview && showFields ? " with-preview" : ""}`}>
+          {showFields && (
+            <div className="request-fields-panel">
           <RequestEditor
             request={request}
             updateStatus={updateStatus}
@@ -1014,8 +1043,6 @@ function RequestDetailModal({
             removingFileId={removingFileId}
             onClose={onClose}
           />
-        </div>
-        {!showPreview && (
           <div className="modal-save-footer">
             <span className={`status ${hasUnsavedChanges ? "warn" : "info"}`}>
               {hasUnsavedChanges ? "Unsaved changes" : "Saved"}
@@ -1024,7 +1051,16 @@ function RequestDetailModal({
               {isSaving ? "Saving..." : "Save changes"}
             </button>
           </div>
-        )}
+            </div>
+          )}
+          {showPreview && (
+            <div className="request-preview-panel">
+              <DocumentPreview request={request} templates={templates}
+                onAttachDocument={(documentType, format) => attachGeneratedDocument(request, documentType, format)} />
+            </div>
+          )}
+        </div>
+
       </section>
     </div>
   );
