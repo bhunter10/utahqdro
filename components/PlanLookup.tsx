@@ -95,7 +95,7 @@ export function PlanLookup({ user }: { user: User }) {
           <fieldset disabled={saving || loading} style={{ border: 0, padding: 0 }}>
             <div className="field-grid">
               <label className="field">Formal plan name<input className="input" autoFocus required maxLength={300} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
-              <label className="field">Plan administrator<input className="input" required maxLength={300} value={draft.administrator} onChange={(event) => setDraft({ ...draft, administrator: event.target.value })} /></label>
+              <label className="field">Plan administrator<textarea className="textarea" required maxLength={300} value={draft.administrator} onChange={(event) => setDraft({ ...draft, administrator: event.target.value })} /></label>
               <label className="field">Entity / provider<select className="select" required value={draft.entity} onChange={(event) => setDraft({ ...draft, entity: event.target.value })}><option value="">Select entity</option>{planEntities.map((value) => <option key={value}>{value}</option>)}</select></label>
               <label className="field">Account type<select className="select" required value={draft.accountType} onChange={(event) => setDraft({ ...draft, accountType: event.target.value })}><option value="">Select type</option>{planAccountTypes.map((value) => <option key={value}>{value}</option>)}</select></label>
               <label className="field full-width">Notes / alternate names<textarea className="textarea" maxLength={3000} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label>
@@ -145,7 +145,7 @@ export function PlanLookup({ user }: { user: User }) {
         {selectedPlan && <>
           <dl className="plan-details">
             <dt>Plan name</dt><dd>{selectedPlan.name || "Not recorded yet"}</dd>
-            <dt>Plan administrator</dt><dd>{selectedPlan.administrator || "Not recorded yet"}</dd>
+            <dt>Plan administrator</dt><dd style={{ whiteSpace: "pre-line" }}>{selectedPlan.administrator || "Not recorded yet"}</dd>
             <dt>QDRO template</dt><dd>{matchedPlanTemplate(selectedPlan).name}</dd>
           </dl>
           <button type="button" className="button secondary" disabled={saving} onClick={() => { detailDialog.current?.close(); setEditingId(selectedPlan.id.startsWith("offered-") ? "" : selectedPlan.id); setDraft({ ...selectedPlan, accountType: planAccountTypes.includes(selectedPlan.accountType) ? selectedPlan.accountType : "" }); setMessage(""); setEditingInModal(true); setShowForm(true); }}>Edit plan</button>
