@@ -22,9 +22,12 @@ export function prepareGoogleDocumentHtml(html: string) {
         return `<td${clean} style="${style}"><p style="${googleExportStyles.headingLine}">${text.trim()}</p></td>`;
       });
   });
-  return headings.replace(/(<\/table>)\s*(<p\b[^>]*>)(\s*(?:WHEREAS this Court|COMES NOW))/i,
-    (_match, table: string, paragraph: string, text: string) => {
-      const bodyParagraph = paragraph.replace(/margin-top:\s*12pt;?/i, "margin-top: 0;");
-      return `${table}<p style="${googleExportStyles.captionGap}">&nbsp;</p>${bodyParagraph}${text}`;
+  return headings.replace(/(<table\b[^>]*>[\s\S]*?<\/table>)\s*(<p\b[^>]*>)/gi,
+    (match, table: string, paragraph: string) => {
+      // Locate the caption by its content, rather than a plan-specific opening
+      // sentence: some QDROs start with a heading or different recital wording.
+      if (!table.includes("In the Matter of the Marriage of") || paragraph.includes(googleExportStyles.captionGap)) return match;
+      const bodyParagraph = paragraph.replace(/margin-top:\s*[^;"']+;?/i, "margin-top: 0;");
+      return `${table}<p style="${googleExportStyles.captionGap}">&nbsp;</p>${bodyParagraph}`;
     });
 }

@@ -229,3 +229,18 @@ test("Google appearance and withdrawal use compact headings and one caption gap"
     assert.equal(prepareGoogleDocumentHtml(html), html);
   }
 });
+
+
+test("every offered QDRO plan gets one Google caption gap regardless of opening text", async () => {
+  const { prepareGoogleDocumentHtml } = await import("../lib/google-document-html");
+  const { offeredPlans } = await import("../lib/plan-directory");
+  for (const plan of offeredPlans) {
+    const request = { ...demoRequest, templateFamily: plan.entity, fields: { ...demoRequest.fields, plan_family: plan.entity, account_type: plan.accountType } };
+    const html = prepareGoogleDocumentHtml(renderGeneratedDocumentHtml(request, "qdro", documentTemplates));
+    const captionAndBody = html.slice(html.indexOf("In the Matter of the Marriage of"));
+    assert.match(captionAndBody, /<\/table><p style="[^"]*height: 12pt;[^"]*">&nbsp;<\/p><p/);
+    assert.equal((html.match(/padding: 0; height: 12pt;/g) || []).length, 1, `${plan.entity} ${plan.accountType}`);
+    assert.ok(!html.includes("margin-top: 12pt;"));
+    assert.equal(prepareGoogleDocumentHtml(html), html);
+  }
+});

@@ -40,10 +40,11 @@ export async function POST(req: Request) {
     templateSnapshot.docs.forEach((doc) => templatesById.set(doc.id, { ...doc.data(), id: doc.id } as DocumentTemplate));
     const html = renderGeneratedDocumentHtml(request, documentType as GeneratedDocumentType, [...templatesById.values()]);
     const buffer = await generateDocumentFile(html, format);
-    const id = `admin-generated-${randomUUID()}`;
+    const uniqueId = randomUUID();
+    const id = `admin-generated-${uniqueId}`;
     const label = generatedDocumentLabels[documentType as GeneratedDocumentType];
-    const fileName = `${requestId}-${label.replace(/\s+/g, "-")}.${format}`;
-    const storagePath = `admin/requests/${requestId}/${id}-${fileName}`;
+    const fileName = `${requestId}-${label.replace(/\s+/g, "-")}-${uniqueId.slice(0, 8)}.${format}`;
+    const storagePath = `admin/requests/${requestId}/${fileName}`;
     const file: RequestFile = { id, label, kind: "generated", status: "generated", fileName, storagePath };
     await bucket.file(storagePath).save(buffer, {
       resumable: false,

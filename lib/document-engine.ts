@@ -474,7 +474,7 @@ const supplementalCaptionStyles = {
   parties: `width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: 1px solid #000000; padding: 18pt 12pt 18pt 0; vertical-align: top; ${supplementalCaptionText}`,
   details: `width: 50%; border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: none; border-right: none; padding: 18pt 0 18pt 14pt; vertical-align: top; ${supplementalCaptionText}`,
   intro: "margin: 0 0 12pt; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;",
-  party: "margin: 0; text-transform: uppercase; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;",
+  party: "margin: 0; font-family: Times New Roman; font-size: 12pt; line-height: 12pt; color: #000000;",
   title: `margin: 0 0 18pt; ${supplementalCaptionText}`,
   line: `margin: 0; ${supplementalCaptionText}`
 };

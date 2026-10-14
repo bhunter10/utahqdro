@@ -5,6 +5,8 @@ export const withdrawalOfCounselMergeFields = [
   "party1_name",
   "party1_email",
   "party2_name",
+  "party1_name_upper",
+  "party2_name_upper",
   "party2_email",
   "case_number",
   "judge_name",
@@ -34,8 +36,8 @@ export const withdrawalOfCounselHtmlTemplate = `
       <tr>
         <td class="caption-parties">
           <p class="caption-intro">In the Matter of the Marriage of</p>
-          <div class="caption-party">{{party1_name}}, and</div>
-          <div class="caption-party">{{party2_name}}.</div>
+          <div class="caption-party">{{party1_name_upper}}, and</div>
+          <div class="caption-party">{{party2_name_upper}}.</div>
         </td>
         <td class="caption-details">
           <p class="caption-title">WITHDRAWAL OF COUNSEL</p>

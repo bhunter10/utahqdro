@@ -4,6 +4,8 @@ export const appearanceOfCounselMergeFields = [
   "court_county",
   "party1_name",
   "party2_name",
+  "party1_name_upper",
+  "party2_name_upper",
   "case_number",
   "judge_name",
   "current_date"
@@ -32,8 +34,8 @@ export const appearanceOfCounselHtmlTemplate = `
       <tr>
         <td class="caption-parties">
           <p class="caption-intro">In the Matter of the Marriage of</p>
-          <div class="caption-party">{{party1_name}}, and</div>
-          <div class="caption-party">{{party2_name}}.</div>
+          <div class="caption-party">{{party1_name_upper}}, and</div>
+          <div class="caption-party">{{party2_name_upper}}.</div>
         </td>
         <td class="caption-details">
           <p class="caption-title">LIMITED APPEARANCE OF COUNSEL</p>

@@ -118,9 +118,8 @@ function getLocalFilePath(url, requestId, file) {
 }
 
 function getStoragePath(requestId, file) {
-  const kind = file.kind || "other";
   const fileName = safeFileName(file.fileName || getFileNameFromUrl(file.url, `${file.id || "file"}.pdf`), `${file.id || "file"}.pdf`);
-  return `wordpress-imports/requests/${requestId}/${kind}/${file.id || "file"}-${fileName}`;
+  return `admin/requests/${requestId}/${file.id || "file"}-${fileName}`;
 }
 
 function removeLegacyUrlWhenMigrated(file) {
