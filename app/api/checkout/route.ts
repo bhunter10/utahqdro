@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   if (!accessToken || !locationId) {
     return NextResponse.json({
       message:
-        "Square Checkout is wired but not enabled. Add SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID to create live payment links.",
+        "Your request has been saved as Payment Pending. Credit card payments are not available yet.",
       requestId
     });
   }

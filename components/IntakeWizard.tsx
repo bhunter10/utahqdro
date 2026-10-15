@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   createUserWithEmailAndPassword,
@@ -27,11 +27,6 @@ const readinessChecks = [
     id: "hasDecreePdf",
     label: "I have a PDF copy of the signed decree.",
     blocker: "You can usually get this from your lawyer or the court."
-  },
-  {
-    id: "hasStatement",
-    label: "I have a statement for the retirement account being divided.",
-    blocker: "The account owner can usually download this from the plan website."
   },
   {
     id: "hasPersonalInfo",
@@ -170,7 +165,14 @@ export function IntakeWizard() {
         clientUser && (savedOwnerUid ? savedOwnerUid === clientUser.uid : savedOwnerEmail ? savedOwnerEmail === currentEmail : false);
 
       if (belongsToCurrentUser) {
-        setData(parsed.data || {});
+        const restoredData = { ...parsed.data };
+        // Draft storage retains text, but cannot restore local File objects.
+        for (const step of intakeSteps) {
+          for (const field of step.fields) {
+            if (field.type === "file") delete restoredData[field.id];
+          }
+        }
+        setData(restoredData);
         setReady(parsed.ready || {});
         if (readinessChecks.every((check) => parsed.ready?.[check.id]) && isIraScreeningComplete(parsed.data || {})) {
           setActiveStep(-1);
@@ -229,7 +231,7 @@ export function IntakeWizard() {
       id: "DRAFT",
       clientName: requester.name,
       clientEmail: requester.email,
-      status: submitted ? "1.1 Pmt Req to Party1" : "Pending",
+      status: submitted ? "Payment Pending" : "Pending",
       paymentState: submitted ? "pending" : "unpaid",
       signatureState: "not_started",
       templateFamily: String(fields.plan_family || "Other"),
@@ -254,6 +256,15 @@ export function IntakeWizard() {
 
   function updateField(id: string, value: string | boolean) {
     setData((current) => {
+      if (id === "account_owner" && typeof value === "string") {
+        return {
+          ...current,
+          account_owner: value,
+          account_awardee: value.startsWith("Party 2")
+            ? "Party 1 (First person named in your case)"
+            : "Party 2 (Second person named in your case)"
+        };
+      }
       if (id !== "court_location" || typeof value !== "string") {
         return { ...current, [id]: value };
       }
@@ -303,7 +314,7 @@ export function IntakeWizard() {
         ownerUid: clientUser.uid,
         clientName: requester.name,
         clientEmail: requester.email,
-        status: "1.1 Pmt Req to Party1",
+        status: "Payment Pending",
         paymentState: "pending",
         signatureState: "not_started",
         templateFamily: String(data.plan_family || "Other"),
@@ -335,7 +346,7 @@ export function IntakeWizard() {
         window.location.href = payload.url;
         return;
       }
-      alert(payload.message || "Payment route is ready. Add Square credentials to enable live checkout.");
+      alert(payload.message || "Your request has been saved as Payment Pending. Credit card payments are not available yet.");
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not save the request. Please try again.");
     } finally {
@@ -426,7 +437,7 @@ export function IntakeWizard() {
             type="button"
             onClick={() => setActiveStep(intakeSteps.length)}
           >
-          Review, sign & pay
+            Payment
           </button>
         )}
       </aside>
@@ -505,7 +516,7 @@ export function IntakeWizard() {
         ) : (
           <>
             <section className="panel">
-              <span className="status info">Review</span>
+              <span className="status info">Payment</span>
               <div className="field-grid" style={{ marginTop: 18 }}>
                 <div className="field">
                   <label htmlFor="field-billing_name">Billing full name</label>
@@ -530,7 +541,7 @@ export function IntakeWizard() {
                     onChange={(event) => updateField("billing_email", event.target.value)}
                   />
                 </div>
-                <div className="field">
+                <div className="field full-field">
                   <label htmlFor="field-billing_address_street">Billing street address</label>
                   <input
                     className="input"
@@ -541,7 +552,7 @@ export function IntakeWizard() {
                     onChange={(event) => updateField("billing_address_street", event.target.value)}
                   />
                 </div>
-                <div className="field">
+                <div className="field full-field">
                   <label htmlFor="field-billing_address_line2">Billing address line 2</label>
                   <input
                     className="input"
@@ -552,7 +563,7 @@ export function IntakeWizard() {
                     onChange={(event) => updateField("billing_address_line2", event.target.value)}
                   />
                 </div>
-                <div className="field">
+                <div className="field full-field">
                   <label htmlFor="field-billing_address_city">Billing city</label>
                   <input
                     className="input"
@@ -1013,6 +1024,7 @@ function FieldControl({
   onChange: (value: string | boolean) => void;
   onFileChange?: (file: File | null) => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const inputId = `field-${field.id}`;
   const isSsnField = isSsnFieldId(field.id);
   const isPhoneField = field.type === "phone";
@@ -1026,7 +1038,7 @@ function FieldControl({
       onChange(isSsnField ? formatSsnInput(event.target.value) : isPhoneField ? formatPhoneInput(event.target.value) : event.target.value)
   };
   const conditionalHelp = getConditionalHelp(field, data);
-  const fieldClassName = ["field", field.fullWidth ? "full-field" : "", field.constrained ? "constrained-field" : ""].filter(Boolean).join(" ");
+  const fieldClassName = ["field", (field.fullWidth || /_address_(street|line2|city)$/.test(field.id)) ? "full-field" : "", field.constrained ? "constrained-field" : ""].filter(Boolean).join(" ");
 
   if (field.type === "radio") {
     return (
@@ -1037,7 +1049,13 @@ function FieldControl({
         <div className="choice-row">
           {field.options?.map((option) => (
             <label className="choice" key={option}>
-              <input type="radio" name={field.id} checked={value === option} onChange={() => onChange(option)} />
+              <input
+                type="radio"
+                name={field.id}
+                checked={value === option}
+                disabled={field.id === "account_awardee" && typeof data.account_owner === "string" && option.slice(0, 7) === data.account_owner.slice(0, 7)}
+                onChange={() => onChange(option)}
+              />
               <span>{formatFieldOptionLabel(field.id, option)}</span>
             </label>
           ))}
@@ -1085,6 +1103,7 @@ function FieldControl({
           className="input"
           id={inputId}
           type="file"
+          ref={fileInputRef}
           accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
           onChange={(event) => {
             const file = event.target.files?.[0] || null;
@@ -1092,7 +1111,25 @@ function FieldControl({
             else onChange(file?.name || "");
           }}
         />
-        {value && <small>Selected: {String(value)}</small>}
+        <div className="selected-upload">
+          {value && (
+            <>
+            <small title={String(value)}>Selected: {String(value)}</small>
+            <button
+              className="selected-upload-remove"
+              type="button"
+              aria-label={`Remove ${String(value)}`}
+              onClick={() => {
+                if (fileInputRef.current) fileInputRef.current.value = "";
+                if (onFileChange) onFileChange(null);
+                else onChange("");
+              }}
+            >
+              ×
+            </button>
+            </>
+          )}
+        </div>
       </div>
     );
   }

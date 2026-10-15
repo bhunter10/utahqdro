@@ -1,3 +1,4 @@
+import { deriveDocumentData } from "../lib/document-engine";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { documentHtmlToRtf } from "../lib/document-rtf";
@@ -242,5 +243,29 @@ test("every offered QDRO plan gets one Google caption gap regardless of opening 
     assert.equal((html.match(/padding: 0; height: 12pt;/g) || []).length, 1, `${plan.entity} ${plan.accountType}`);
     assert.ok(!html.includes("margin-top: 12pt;"));
     assert.equal(prepareGoogleDocumentHtml(html), html);
+  }
+});
+
+test("conflicting party selections keep participant and alternate payee distinct", () => {
+  for (const owner of ["Party 1", "Party 2"]) {
+    const request = {
+      ...demoRequest,
+      fields: {
+        ...demoRequest.fields,
+        plan_family: "Charles Schwab",
+        account_type: "401k",
+        party1_name: "Alice Example",
+        party2_name: "Bob Example",
+        account_owner: owner,
+        account_awardee: owner
+      }
+    };
+    const data = deriveDocumentData(request);
+    assert.equal(data.participant_name, owner === "Party 1" ? "Alice Example" : "Bob Example");
+    assert.equal(data.alternate_payee_name, owner === "Party 1" ? "Bob Example" : "Alice Example");
+    assert.notEqual(data.participant_email, data.alternate_payee_email);
+    const html = renderGeneratedDocumentHtml(request, "qdro", documentTemplates);
+    assert.ok(html.includes(`${data.participant_name}, Participant`));
+    assert.ok(html.includes(`${data.alternate_payee_name}, Alternate Payee`));
   }
 });

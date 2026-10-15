@@ -17,6 +17,7 @@ service cloud.firestore {
       return data.keys().hasAll(["ownerUid", "status", "paymentState", "signatureState", "fields", "createdAt", "updatedAt"])
         && data.ownerUid is string
         && data.status in [
+          "Payment Pending",
           "Pending",
           "1 Approved Info",
           "1.1 Pmt Req to Party1",

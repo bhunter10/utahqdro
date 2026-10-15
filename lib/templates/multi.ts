@@ -134,13 +134,13 @@ export const multiAdp401kHtmlTemplate = `
 
   <p class="indent">Participant and the Alternate Payee identification and contact information:</p>
 
-  <p class="subindent">a. Participant Information:</p>
+  <p class="indent">a. Participant Information:</p>
 
-  <p class="subindent">Name: {{participant_name}}<br />Address: {{participant_full_address}}<br />Social Security Number: {{participant_ssn}}<br />Birth Date: {{participant_dob}}<br />Telephone: {{participant_phone}}<br />Email: {{participant_email}}</p>
+  <p class="party-contact">Name: {{participant_name}}<br />Address: {{participant_full_address}}<br />Social Security Number: {{participant_ssn}}<br />Birth Date: {{participant_dob}}<br />Telephone: {{participant_phone}}<br />Email: {{participant_email}}</p>
 
-  <p class="subindent">b. Alternate Payee Information:</p>
+  <p class="indent">b. Alternate Payee Information:</p>
 
-  <p class="subindent">Name: {{alternate_payee_name}}<br />Address: {{alternate_full_address}}<br />Social Security Number: {{alternate_payee_ssn}}<br />Birth Date: {{alternate_payee_dob}}<br />Telephone: {{alternate_payee_phone}}<br />Email: {{alternate_payee_email}}</p>
+  <p class="party-contact">Name: {{alternate_payee_name}}<br />Address: {{alternate_full_address}}<br />Social Security Number: {{alternate_payee_ssn}}<br />Birth Date: {{alternate_payee_dob}}<br />Telephone: {{alternate_payee_phone}}<br />Email: {{alternate_payee_email}}</p>
 
   <p class="indent">The Participant has a vested interest in the Plan, and the Alternate Payee is the former spouse of the Participant, and has an interest in all or a portion of the Participant's interest under the Plan, as described in Section 3 below. The Alternate Payee shall have the duty to notify the Plan Administrator in writing of any change in mailing address subsequent to the entry of this Order.</p>
 
@@ -162,7 +162,7 @@ export const multiAdp401kHtmlTemplate = `
 
   <p>The Plan Administrator for the {{formal_plan_name}} ("Plan") is {{employer_name}}{{plan_number_under_phrase}}:</p>
 
-  <p class="subindent"><em>Plan Admin: {{employer_name}}<br />Address: {{employer_full_address}}<br />Phone: {{employer_phone}}<br />Fax: {{employer_fax}}<br />Email: {{employer_email}}</em></p>
+  <p class="party-contact"><em>Plan Admin: {{employer_name}}<br />Address: {{employer_full_address}}<br />Phone: {{employer_phone}}<br />Fax: {{employer_fax}}<br />Email: {{employer_email}}</em></p>
 
   <p class="court-heading"><strong>SECTION 7. JURISDICTION</strong></p>
 

@@ -34,11 +34,11 @@ export const empowerHtmlTemplate = `
 
   <p>Participant's information is as follows:</p>
 
-  <p class="subindent">Social Security Number: {{participant_ssn}}<br />Date of birth: {{participant_dob}}<br />Last known mailing address: {{participant_full_address}}<br />Telephone Number: {{participant_phone}}<br />Email address: {{participant_email}}</p>
+  <p class="party-contact">Social Security Number: {{participant_ssn}}<br />Date of birth: {{participant_dob}}<br />Last known mailing address: {{participant_full_address}}<br />Telephone Number: {{participant_phone}}<br />Email address: {{participant_email}}</p>
 
   <p class="indent">3. <u>Alternate Payee Information</u>. {{alternate_payee_name}} ("Alternate Payee") is the alternate payee for purposes of this QDRO. Alternate Payee's Information is as follows:</p>
 
-  <p class="subindent">Social Security Number: {{alternate_payee_ssn}}<br />Date of birth: {{alternate_payee_dob}}<br />Last known mailing address: {{alternate_full_address}}<br />Telephone Number: {{alternate_payee_phone}}<br />Email address: {{alternate_payee_email}}</p>
+  <p class="party-contact">Social Security Number: {{alternate_payee_ssn}}<br />Date of birth: {{alternate_payee_dob}}<br />Last known mailing address: {{alternate_full_address}}<br />Telephone Number: {{alternate_payee_phone}}<br />Email address: {{alternate_payee_email}}</p>
 
   <p>The Alternate Payee is instructed to keep the Plan advised of any change of mailing address or name by sending written notice, with reference to the Participant's name, to the Plan Administrator at Empower, c/o QDROS.com, P.O. Box 173764, Denver, CO, 80217-3764; Phone 800-527-8481; Fax 330-722-2735.</p>
 

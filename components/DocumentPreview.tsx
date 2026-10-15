@@ -152,7 +152,7 @@ export function DocumentPreview({
             </span>
           </div>
           {activeGoogleDoc?.status && (
-            <p className="preview-action-status">
+            <p className="preview-action-status google-doc-status">
               {activeGoogleDoc.status} {activeGoogleDoc.url && <a className="muted-link" href={activeGoogleDoc.url} target="_blank">Open Google Doc</a>}
             </p>
           )}

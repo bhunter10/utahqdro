@@ -14,7 +14,8 @@ function value(fields: QdroRequest["fields"], key: string) {
 export function deriveDocumentData(request: QdroRequest, maskSensitive = false) {
   const court = findUtahCourt(value(request.fields, "court_location"));
   const owner = normalizePartyChoice(value(request.fields, "account_owner")) || "Party 1";
-  const awardee = normalizePartyChoice(value(request.fields, "account_awardee")) || (owner === "Party 2" ? "Party 1" : "Party 2");
+  // The alternate payee is the former spouse, never the account owner.
+  const awardee = owner === "Party 2" ? "Party 1" : "Party 2";
   const party1Name = normalizeAllCapsName(value(request.fields, "party1_name"));
   const party2Name = normalizeAllCapsName(value(request.fields, "party2_name"));
   const party1 = {
@@ -81,7 +82,7 @@ export function deriveDocumentData(request: QdroRequest, maskSensitive = false) 
     account_type: value(request.fields, "account_type"),
     urs_plan_types: value(request.fields, "account_type") || "URS DC Savings Plan",
     urs_percent_amount: divisionType === "Percentage" ? `${percentAward || "50"}%` : "50%",
-    employer_name: value(request.fields, "employer_name") || "to be confirmed",
+    employer_name: value(request.fields, "employer_name"),
     employer_phone: value(request.fields, "employer_phone"),
     employer_full_address: formatMailingAddress(request.fields, "employer"),
     employer_fax: value(request.fields, "employer_fax"),
@@ -453,6 +454,7 @@ function renderDocumentBreak(wrappedArticles: boolean) {
 function inlineDocumentStyles(html: string) {
   const paragraphStyle = "margin: 0 0 12pt; line-height: 14pt; font-family: Times New Roman; font-size: 12pt; color: #000000;";
   const indentStyle = `${paragraphStyle} text-indent: 0.5in;`;
+  const partyContactStyle = `${paragraphStyle} padding-left: 0.5in; text-indent: 0;`;
   const subindentStyle = `${paragraphStyle} padding-left: 0.5in; text-indent: 0.5in;`;
   const headingStyle = "margin: 12pt 0 12pt; line-height: 12pt; font-family: Times New Roman; font-size: 12pt; color: #000000; text-align: center; text-transform: uppercase;";
   const footerStyle = `${paragraphStyle} text-align: center;`;
@@ -460,6 +462,7 @@ function inlineDocumentStyles(html: string) {
   return html
     .replace(/<p>/g, `<p style="${paragraphStyle}">`)
     .replace(/<p class="indent">/g, `<p style="${indentStyle}">`)
+    .replace(/<p class="party-contact">/g, `<p style="${partyContactStyle}">`)
     .replace(/<p class="subindent">/g, `<p style="${subindentStyle}">`)
     .replace(/<p class="court-heading"(?: style="[^"]*")?>/g, `<p style="${headingStyle}">`)
     .replace(/<p class="court-footer">/g, `<p style="${footerStyle}">`);

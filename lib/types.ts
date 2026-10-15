@@ -1,4 +1,5 @@
 export const requestStatuses = [
+  "Payment Pending",
   "Pending",
   "1 Approved Info",
   "1.1 Pmt Req to Party1",

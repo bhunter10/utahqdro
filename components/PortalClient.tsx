@@ -9,8 +9,9 @@ import {
   signOut,
   type User
 } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
-import { demoRequest } from "@/lib/content";
+import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
+import type { QdroRequest } from "@/lib/types";
+import { formatLongDate } from "@/lib/field-format";
 import { auth, db, hasFirebaseConfig } from "@/lib/firebase";
 
 export function PortalClient() {
@@ -20,6 +21,29 @@ export function PortalClient() {
   const [mode, setMode] = useState<"sign-in" | "create">("sign-in");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+
+  const [requestState, setRequestState] = useState<{
+    uid: string;
+    requests: QdroRequest[];
+    error?: string;
+  } | null>(null);
+  const [selectedRequestId, setSelectedRequestId] = useState("");
+  const ownedState = requestState?.uid === user?.uid ? requestState : null;
+  const requests = ownedState?.requests || [];
+  const activeRequest = requests.find((request) => request.id === selectedRequestId) || requests[0];
+
+  useEffect(() => {
+    if (!user || !db) return;
+    return onSnapshot(
+      query(collection(db, "requests"), where("ownerUid", "==", user.uid)),
+      (snapshot) => {
+        const savedRequests = snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id }) as QdroRequest);
+        savedRequests.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        setRequestState({ uid: user.uid, requests: savedRequests });
+      },
+      () => setRequestState({ uid: user.uid, requests: [], error: "We couldn't load your requests. Please refresh and try again." })
+    );
+  }, [user]);
 
   useEffect(() => {
     if (!auth) return;
@@ -121,13 +145,12 @@ export function PortalClient() {
             <div className="eyebrow">Client portal</div>
             <h1>Your QDRO request</h1>
             <p className="lead">
-              Signed in as {user.email}. Track status, notes, files, payment,
-              and signatures.
+              Signed in as {user.email}.
             </p>
           </div>
           <div className="nav-actions">
-            <Link className="button secondary" href="/qdro-request">
-              Start another request
+            <Link className="button primary" href="/qdro-request">
+              Start another QDRO request
             </Link>
             <button className="button ghost" type="button" onClick={() => auth && signOut(auth)}>
               Sign out
@@ -135,53 +158,77 @@ export function PortalClient() {
           </div>
         </div>
 
-        <div className="grid three">
-          <article className="card">
-            <span className="status info">{demoRequest.status}</span>
-            <h3 style={{ marginTop: 14 }}>Current status</h3>
-            <p>Updated September 21, 2026</p>
-          </article>
-          <article className="card">
-            <span className="status">{demoRequest.paymentState}</span>
-            <h3 style={{ marginTop: 14 }}>Payment</h3>
-            <p>Square payment is recorded before drafting begins.</p>
-          </article>
-          <article className="card">
-            <span className="status warn">{demoRequest.signatureState.replaceAll("_", " ")}</span>
-            <h3 style={{ marginTop: 14 }}>Signatures</h3>
-            <p>Client signature and later signing milestones appear here once routing starts.</p>
-          </article>
-        </div>
-
-        <div className="grid two">
-          <section className="panel">
-            <h2>Client-visible notes</h2>
-            {demoRequest.notes
-              .filter((note) => note.visibility === "client")
-              .map((note) => (
-                <article className="card" key={note.id} style={{ marginTop: 12 }}>
-                  <strong>{note.author}</strong>
-                  <p>{note.body}</p>
-                </article>
-              ))}
-          </section>
-          <section className="panel">
-            <h2>Files</h2>
-            <div className="checklist">
-              {demoRequest.files.map((file) => (
-                <div className="mini-check" key={file.id}>
-                  <span className="icon">✓</span>
-                  <div>
-                    <strong>{file.label}</strong>
-                    <small style={{ display: "block", color: "var(--muted)" }}>
-                      {file.fileName} · {file.status}
-                    </small>
-                  </div>
-                </div>
-              ))}
+        {!ownedState ? (
+          <p role="status">Loading your requests...</p>
+        ) : ownedState.error ? (
+          <p role="alert">{ownedState.error}</p>
+        ) : !activeRequest ? (
+          <p>You haven't submitted a request yet.</p>
+        ) : (
+          <>
+            {requests.length > 1 && (
+              <div className="field" style={{ marginBottom: 24 }}>
+                <label htmlFor="portal-request">Request</label>
+                <select className="select" id="portal-request" value={activeRequest.id} onChange={(event) => setSelectedRequestId(event.target.value)}>
+                  {requests.map((request) => (
+                    <option key={request.id} value={request.id}>
+                      {String(request.fields.entity_name || request.templateFamily)} · {formatLongDate(request.createdAt.slice(0, 10))} · {request.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="grid three">
+              <article className="card">
+                <span className="status info">{activeRequest.status}</span>
+                <h3 style={{ marginTop: 14 }}>Current status</h3>
+                <p>Updated {formatLongDate(activeRequest.updatedAt.slice(0, 10))}</p>
+              </article>
+              <article className="card">
+                <span className="status">{activeRequest.paymentState}</span>
+                <h3 style={{ marginTop: 14 }}>Payment</h3>
+                <p>Square payment is recorded before drafting begins.</p>
+              </article>
+              <article className="card">
+                <span className="status warn">{activeRequest.signatureState.replaceAll("_", " ")}</span>
+                <h3 style={{ marginTop: 14 }}>Signatures</h3>
+                <p>Client signature and later signing milestones appear here once routing starts.</p>
+              </article>
             </div>
-          </section>
-        </div>
+
+            <div className="grid two">
+              <section className="panel">
+                <h2>Client-visible notes</h2>
+                {!activeRequest.notes.some((note) => note.visibility === "client") && <p>No updates yet.</p>}
+                {activeRequest.notes
+                  .filter((note) => note.visibility === "client")
+                  .map((note) => (
+                    <article className="card" key={note.id} style={{ marginTop: 12 }}>
+                      <strong>{note.author}</strong>
+                      <p>{note.body}</p>
+                    </article>
+                  ))}
+              </section>
+              <section className="panel">
+                <h2>Files</h2>
+                <div className="checklist">
+                  {activeRequest.files.length === 0 && <p>No files uploaded.</p>}
+                  {activeRequest.files.map((file) => (
+                    <div className="mini-check" key={file.id}>
+                      <span className="icon">✓</span>
+                      <div>
+                        <strong>{file.label}</strong>
+                        <small style={{ display: "block", color: "var(--muted)" }}>
+                          {file.fileName} · {file.status}
+                        </small>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          </>
+        )}
       </section>
     </main>
   );

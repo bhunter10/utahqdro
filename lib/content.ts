@@ -81,10 +81,10 @@ export const intakeSteps: IntakeStep[] = [
   {
     id: "uploads",
     title: "Uploads",
-    description: "Upload the documents needed before drafting can begin.",
+    description: "Upload supporting documents if available. You can submit your request without attachments.",
     fields: [
-      { id: "signed_decree", label: "Signed divorce decree", type: "file", required: true, help: "PDF preferred." },
-      { id: "account_statement", label: "Retirement account statement", type: "file", required: true, help: "PDF or image accepted." }
+      { id: "signed_decree", label: "Signed divorce decree", type: "file", help: "Upload a PDF if available." },
+      { id: "account_statement", label: "Retirement account statement", type: "file", help: "Upload a PDF or image if available." }
     ]
   },
   {

@@ -2058,6 +2058,10 @@ th {
   transform: translateY(0);
 }
 
+.google-doc-status {
+  white-space: nowrap;
+}
+
 .preview-action-status {
   max-width: 620px;
   margin-bottom: 0;
@@ -2975,4 +2979,33 @@ th {
   .choice-row {
     grid-template-columns: 1fr;
   }
+}
+
+.selected-upload {
+  min-height: 32px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.selected-upload small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-upload-remove {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 22px;
+  cursor: pointer;
 }
