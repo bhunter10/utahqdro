@@ -18,6 +18,7 @@ export function PortalClient() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [mode, setMode] = useState<"sign-in" | "create">("sign-in");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
@@ -46,8 +47,14 @@ export function PortalClient() {
   }, [user]);
 
   useEffect(() => {
-    if (!auth) return;
-    return onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
+    if (!auth) {
+      setAuthReady(true);
+      return;
+    }
+    return onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthReady(true);
+    });
   }, []);
 
   async function handleAuth() {
@@ -77,6 +84,10 @@ export function PortalClient() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (!authReady) {
+    return <main className="page" aria-busy="true"><p role="status">Loading your account…</p></main>;
   }
 
   if (!user) {

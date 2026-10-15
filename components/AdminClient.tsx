@@ -75,6 +75,7 @@ export function AdminClient() {
   const [requests, setRequests] = useState<QdroRequest[]>([]);
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [adminUser, setAdminUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [adminAuthMessage, setAdminAuthMessage] = useState("");
@@ -110,12 +111,15 @@ export function AdminClient() {
 
   useEffect(() => {
     if (!auth) {
+      setAuthReady(true);
+      setAdminAccess("error");
       setTemplateStatus(`Firebase is not configured. Missing: ${missingFirebaseConfig.join(", ")}.`);
       return;
     }
 
     return onAuthStateChanged(auth, (user) => {
       setAdminUser(user);
+      setAuthReady(true);
       if (user) {
         if (isLoginScreen) {
           router.replace("/admin/requests");
@@ -501,6 +505,10 @@ export function AdminClient() {
     setTemplates((currentTemplates) =>
       currentTemplates.map((template) => (template.id === templateId ? result.template as DocumentTemplate : template))
     );
+  }
+
+  if (!authReady || (isLoginScreen && adminUser) || (!isLoginScreen && !adminUser && auth)) {
+    return <main className="page" aria-busy="true"><p role="status">Loading your account…</p></main>;
   }
 
   return (

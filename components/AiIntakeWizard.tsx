@@ -587,6 +587,9 @@ export function AiIntakeWizard() {
             <h2>Request sent.</h2>
             <p>This request is saved as {requestId}.</p>
             <div className="toolbar">
+              <Link className="button primary" href={`/portal?request_id=${encodeURIComponent(requestId)}`}>
+                Client portal
+              </Link>
               <Link className="button secondary" href="/qdro-request-ai">
                 Start another AI request
               </Link>
