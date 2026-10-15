@@ -1,66 +1,68 @@
 import { NextResponse } from "next/server";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { getStripe } from "@/lib/stripe";
 
-type SquarePaymentLinkResponse = {
-  payment_link?: {
-    id?: string;
-    url?: string;
-    long_url?: string;
-  };
-  errors?: Array<{ detail?: string; code?: string }>;
-};
-
-function getSquareApiBaseUrl() {
-  return process.env.SQUARE_ENVIRONMENT === "sandbox" ? "https://connect.squareupsandbox.com" : "https://connect.squareup.com";
-}
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const { requestId, cancelPath, amountCents } = (await req.json()) as { requestId?: string; cancelPath?: string; amountCents?: number };
-  const accessToken = process.env.SQUARE_ACCESS_TOKEN;
-  const locationId = process.env.SQUARE_LOCATION_ID;
-  const requestedPriceCents = typeof amountCents === "number" && [27500, 55000].includes(amountCents) ? amountCents : undefined;
-  const priceCents = requestedPriceCents || Number(process.env.SQUARE_QDRO_PRICE_CENTS || "55000");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const safeCancelPath = cancelPath?.startsWith("/") && !cancelPath.startsWith("//") ? cancelPath : "/qdro-request";
-  const safeRequestId = requestId || "draft";
-
-  if (!accessToken || !locationId) {
-    return NextResponse.json({
-      message:
-        "Your request has been saved as Payment Pending. Credit card payments are not available yet.",
-      requestId
-    });
+  const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) return NextResponse.json({ message: "Sign in before paying." }, { status: 401 });
+  const auth = getAdminAuth();
+  const db = getAdminDb();
+  const stripe = getStripe();
+  if (!auth || !db || !stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
+    return NextResponse.json({ message: "Your request has been saved as Payment Pending. Credit card payments are not available yet." }, { status: 503 });
   }
-
-  const response = await fetch(`${getSquareApiBaseUrl()}/v2/online-checkout/payment-links`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      "Square-Version": process.env.SQUARE_API_VERSION || "2026-09-16"
-    },
-    body: JSON.stringify({
-      idempotency_key: `${safeRequestId}-${Date.now()}`,
-      description: `UtahQDRO request ${safeRequestId}`,
-      quick_pay: {
-        name: priceCents === 27500 ? "UtahQDRO half payment" : "UtahQDRO flat fee",
-        price_money: {
-          amount: Number.isFinite(priceCents) ? priceCents : 55000,
-          currency: "USD"
+  let uid: string;
+  try {
+    uid = (await auth.verifyIdToken(token)).uid;
+  } catch {
+    return NextResponse.json({ message: "Sign in again before paying." }, { status: 401 });
+  }
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ message: "Invalid checkout request." }, { status: 400 });
+  }
+  const { requestId, cancelPath, amountCents = 55000 } = body || {};
+  if (typeof requestId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(requestId) || ![27500, 55000].includes(amountCents)) {
+    return NextResponse.json({ message: "Select a valid request and payment amount." }, { status: 400 });
+  }
+  try {
+    const snapshot = await db.collection("requests").doc(requestId).get();
+    const request = snapshot.data();
+    if (!snapshot.exists || request?.ownerUid !== uid) {
+      return NextResponse.json({ message: "Request not found." }, { status: 404 });
+    }
+    const paidCents = Number(request.stripePaidAmountCents || 0);
+    if (request.paymentState === "paid" || request.paymentState === "waived" || amountCents > 55000 - paidCents) {
+      return NextResponse.json({ message: "This amount exceeds the remaining balance." }, { status: 409 });
+    }
+    const appUrl = new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000");
+    const cancelUrl = new URL(typeof cancelPath === "string" && cancelPath.startsWith("/") ? cancelPath : "/qdro-request", appUrl);
+    if (cancelUrl.origin !== appUrl.origin) {
+      return NextResponse.json({ message: "Invalid return address." }, { status: 400 });
+    }
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      integration_identifier: "utahqdro_checkout_jvmkrsqa",
+      client_reference_id: requestId,
+      metadata: { requestId },
+      payment_intent_data: { metadata: { requestId } },
+      line_items: [{
+        price_data: {
+          currency: "usd",
+          unit_amount: amountCents,
+          product_data: { name: amountCents === 27500 ? "UtahQDRO half payment" : "UtahQDRO flat fee" }
         },
-        location_id: locationId
-      },
-      checkout_options: {
-        redirect_url: `${appUrl}/portal?payment=success&request_id=${encodeURIComponent(safeRequestId)}`
-      },
-      payment_note: `UtahQDRO request ${safeRequestId}; cancel path ${safeCancelPath}`
-    })
-  });
-
-  const payload = (await response.json()) as SquarePaymentLinkResponse;
-  if (!response.ok || !payload.payment_link?.url) {
-    const detail = payload.errors?.map((error) => error.detail || error.code).filter(Boolean).join(" ");
-    return NextResponse.json({ message: detail || "Square could not create a payment link.", requestId }, { status: 502 });
+        quantity: 1
+      }],
+      success_url: `${appUrl.origin}/portal?payment=success&request_id=${encodeURIComponent(requestId)}`,
+      cancel_url: cancelUrl.href
+    });
+    return NextResponse.json({ url: session.url, stripeCheckoutSessionId: session.id });
+  } catch {
+    return NextResponse.json({ message: "Could not start Stripe checkout. Please try again." }, { status: 502 });
   }
-
-  return NextResponse.json({ url: payload.payment_link.url, squarePaymentLinkId: payload.payment_link.id });
 }

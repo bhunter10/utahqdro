@@ -13,11 +13,11 @@ export default function PaymentPage() {
       </HeroBackdrop>
       <section className="section">
         <div className="panel" style={{ marginTop: 28 }}>
-          <span className="status warn">Square required</span>
-          <h2 style={{ marginTop: 14 }}>Checkout is ready for credentials.</h2>
+          <span className="status warn">Secure payment</span>
+          <h2 style={{ marginTop: 14 }}>Pay with your request.</h2>
           <p>
-            Add Square environment variables and a location ID to activate live
-            checkout. Until then, the request flow runs in demo-safe mode.
+            Complete your request to continue to secure Stripe checkout. Your payment
+            confirmation will appear in the client portal.
           </p>
           <Link className="button primary" href="/qdro-request">
             Return to request

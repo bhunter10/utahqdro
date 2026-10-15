@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:documents": "node scripts/test-documents.cjs"
+    "test:documents": "node scripts/test-documents.cjs",
+    "test:payments": "node --test tests/stripe-payments.test.cjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "^153.0.0",
@@ -23,7 +24,8 @@
     "next": "^15.4.4",
     "puppeteer-core": "^25.13.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "stripe": "^23.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.14",

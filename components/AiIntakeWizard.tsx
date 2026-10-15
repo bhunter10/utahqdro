@@ -431,7 +431,7 @@ export function AiIntakeWizard() {
 
     const response = await fetch("/api/checkout", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth?.currentUser?.getIdToken()}` },
       body: JSON.stringify({ requestId, cancelPath: "/qdro-request-ai" })
     });
     const payload = (await response.json()) as { url?: string; message?: string };
@@ -441,7 +441,7 @@ export function AiIntakeWizard() {
     }
 
     setStage("submitted");
-    alert(payload.message || "Payment route is ready. Add Square credentials to enable live checkout.");
+    alert(payload.message || "Payment route is ready. Add Stripe credentials to enable live checkout.");
   }
 
   function continueFromMissingQuestions() {

@@ -25,7 +25,7 @@ Open `http://localhost:3000`.
 ## Deployment
 
 The app is intended to deploy on Vercel. Copy `.env.example` into Vercel
-environment variables before enabling live Firebase, Square, DocuSign, or Google
+environment variables before enabling live Firebase, Stripe, DocuSign, or Google
 Docs integrations.
 
 ## Generated document attachments

@@ -187,7 +187,7 @@ export function PortalClient() {
               <article className="card">
                 <span className="status">{activeRequest.paymentState}</span>
                 <h3 style={{ marginTop: 14 }}>Payment</h3>
-                <p>Square payment is recorded before drafting begins.</p>
+                <p>Stripe payment is recorded before drafting begins.</p>
               </article>
               <article className="card">
                 <span className="status warn">{activeRequest.signatureState.replaceAll("_", " ")}</span>
@@ -198,7 +198,7 @@ export function PortalClient() {
 
             <div className="grid two">
               <section className="panel">
-                <h2>Client-visible notes</h2>
+                <h2>Notes</h2>
                 {!activeRequest.notes.some((note) => note.visibility === "client") && <p>No updates yet.</p>}
                 {activeRequest.notes
                   .filter((note) => note.visibility === "client")
