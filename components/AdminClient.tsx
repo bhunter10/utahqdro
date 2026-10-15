@@ -1122,7 +1122,7 @@ function RequestEditor({
   const [isDeleting, setIsDeleting] = useState(false);
   const [adminUploadType, setAdminUploadType] = useState<AdminUploadType>("certified_qdro");
   const schemaFieldIds = new Set(intakeSteps.flatMap((step) => step.fields.map((field) => field.id)));
-  const hiddenAdminFieldIds = new Set(["client_signature", "entity_name", "wordpress_client_signature_url", "wordpress_status"]);
+  const hiddenAdminFieldIds = new Set(["client_signature", "entity_name", "wordpress_client_signature_url", "wordpress_status", "engagement_terms_agreed", "is_ira", "payment_option"]);
   const extraFields = Object.entries(request.fields).filter(
     ([field, value]) => !hiddenAdminFieldIds.has(field) && !schemaFieldIds.has(field) && !derivedRequestFieldIds.has(field) && hasDisplayValue(value)
   );
@@ -1141,7 +1141,7 @@ function RequestEditor({
   }
 
   return (
-    <section className="panel">
+    <section className="panel admin-request-fields">
       <div className="field-grid one">
         <div className="field">
           <label htmlFor="status">Status</label>
@@ -1156,7 +1156,7 @@ function RequestEditor({
         <InternalNotes request={request} updateInternalNotes={updateInternalNotes} />
         <section className="admin-intake-step">
           <div>
-            <span className="status info">Document settings</span>
+            <h3 className="admin-group-title">Document settings</h3>
           </div>
           <div className="field-grid">
             {adminDocumentFields.map((field) => (
@@ -1171,7 +1171,7 @@ function RequestEditor({
         </section>
         <section className="admin-intake-step">
           <div>
-            <span className="status info">Internal uploads</span>
+            <h3 className="admin-group-title">Internal uploads</h3>
           </div>
           <div className="admin-upload-row">
             <label className="field compact-upload-field">
@@ -1201,7 +1201,7 @@ function RequestEditor({
         {request.files.length > 0 && (
           <section className="admin-intake-step">
             <div>
-              <span className="status info">Attached documents</span>
+              <h3 className="admin-group-title">Attached documents</h3>
             </div>
             <div className="ai-file-list">
               {request.files.map((file) => {
@@ -1258,8 +1258,8 @@ function RequestEditor({
             return (
               <section className="admin-intake-step" key={step.id}>
                 <div>
-                  <span className="status info">{step.title}</span>
-                  {step.description && <p>{step.description}</p>}
+                  <h3 className="admin-group-title">{step.title}</h3>
+                  {step.description && step.id !== "division" && <p>{step.description}</p>}
                 </div>
                 {step.id === "parties" ? (
                   <AdminPartyFieldGroups fields={visibleFields} request={request} updateField={updateField} />
@@ -1281,12 +1281,11 @@ function RequestEditor({
           {extraFields.length > 0 && (
             <section className="admin-intake-step">
               <div>
-                <span className="status info">Additional saved fields</span>
-                <p>Fields saved with this request that are not currently shown on the public request form.</p>
+                <h3 className="admin-group-title">Billing information</h3>
               </div>
               <div className="field-grid">
                 {extraFields.map(([field, value]) => (
-                  <div className="field" key={field}>
+                  <div className={`field${field.endsWith("_address_street") ? " full-field" : ""}`} key={field}>
                     <label htmlFor={`admin-extra-${field}`}>{humanizeFieldId(field)}</label>
                     <input
                       className="input"
@@ -1325,6 +1324,7 @@ function AdminFieldControl({
   request: QdroRequest;
   updateField: (id: string, field: string, value: string) => void;
 }) {
+  const help = ["valuation_date", "market_adjustment", "amended_text", "date_certified_sent_to_admin"].includes(field.id) ? "" : field.help;
   const inputId = `admin-field-${field.id}`;
   const isSsnField = isSsnFieldId(field.id);
   const isPhoneField = field.type === "phone";
@@ -1344,14 +1344,15 @@ function AdminFieldControl({
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       updateField(request.id, field.id, isSsnField ? formatSsnInput(event.target.value) : isPhoneField ? formatPhoneInput(event.target.value) : event.target.value)
   };
-  const fieldClassName = ["field", field.fullWidth ? "full-field" : "", field.constrained ? "constrained-field" : ""].filter(Boolean).join(" ");
+  const isStreetAddress = field.id.endsWith("_address_street");
+  const fieldClassName = ["field", field.fullWidth || isStreetAddress ? "full-field" : "", field.constrained && !isStreetAddress ? "constrained-field" : ""].filter(Boolean).join(" ");
   const options = getAdminFieldOptions(field);
 
   if (field.type === "radio") {
     return (
       <fieldset className="field full-field radio-field">
         <legend>{field.label}</legend>
-        {field.help && <small>{field.help}</small>}
+        {help && <small>{help}</small>}
         <div className="choice-row">
           {options.map((option) => (
             <label className="choice" key={option}>
@@ -1373,7 +1374,7 @@ function AdminFieldControl({
     return (
       <div className={fieldClassName}>
         <label htmlFor={inputId}>{field.label}</label>
-        {field.help && <small>{field.help}</small>}
+        {help && <small>{help}</small>}
         <select className="select" {...common}>
           <option value="">Choose one</option>
           {options.map((option) => (
@@ -1390,7 +1391,7 @@ function AdminFieldControl({
     return (
       <div className="field full-field">
         <label htmlFor={inputId}>{field.label}</label>
-        {field.help && <small>{field.help}</small>}
+        {help && <small>{help}</small>}
         <textarea className="textarea" {...common} placeholder={field.placeholder} />
       </div>
     );
@@ -1400,7 +1401,7 @@ function AdminFieldControl({
     return (
       <div className="field">
         <label htmlFor={inputId}>{field.label}</label>
-        {field.help && <small>{field.help}</small>}
+        {help && <small>{help}</small>}
         <input
           className="input"
           id={inputId}
@@ -1428,7 +1429,7 @@ function AdminFieldControl({
   return (
     <div className={fieldClassName}>
       <label htmlFor={inputId}>{field.label}</label>
-      {field.help && <small>{field.help}</small>}
+      {help && <small>{help}</small>}
       <input
         className="input"
         {...common}
@@ -1448,8 +1449,7 @@ function ClientSignaturePreview({ signature }: { signature: string }) {
   return (
     <section className="admin-intake-step">
       <div>
-        <span className="status info">Client signature</span>
-        <p>Authorization signature saved with this request.</p>
+        <h3 className="admin-group-title">Client signature</h3>
       </div>
       <div className="admin-signature-preview">
         {isImageSignature ? (
@@ -1496,7 +1496,7 @@ function AdminPartyFieldGroups({
       )}
       <section className="party-field-group">
         <div className="party-field-group-head">
-          <span className="status info">Party 1</span>
+          <h3 className="admin-group-title">Party 1</h3>
         </div>
         <div className="field-grid">
           {party1Fields.map((field) => (
@@ -1506,7 +1506,7 @@ function AdminPartyFieldGroups({
       </section>
       <section className="party-field-group party-field-group-secondary">
         <div className="party-field-group-head">
-          <span className="status info">Party 2</span>
+          <h3 className="admin-group-title">Party 2</h3>
         </div>
         <div className="field-grid">
           {party2Fields.map((field) => (
@@ -1591,6 +1591,7 @@ function InternalNotes({
 }
 
 function isAdminFieldVisible(field: IntakeField, data: QdroRequest["fields"]) {
+  if (field.id.endsWith("_address_line2") && !String(data[field.id] || "").trim()) return false;
   if (!field.conditional) return true;
   return data[field.conditional.field] === field.conditional.equals;
 }

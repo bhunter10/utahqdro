@@ -2191,12 +2191,59 @@ th {
 
 .admin-intake-sections {
   display: grid;
-  gap: 18px;
+  gap: 24px;
 }
 
 .admin-intake-step {
   display: grid;
-  gap: 14px;
+  gap: 16px;
+}
+
+.admin-request-fields > .field-grid {
+  margin-top: 0;
+  gap: 24px;
+}
+
+.admin-request-fields .admin-intake-step .field-grid,
+.admin-request-fields .party-field-groups {
+  margin-top: 0;
+}
+
+.admin-request-fields .party-field-groups {
+  gap: 24px;
+}
+
+.admin-request-fields .party-field-group {
+  gap: 16px;
+}
+
+.admin-request-fields .party-field-group-secondary {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.admin-request-fields .party-field-group-head .admin-group-title {
+  width: 100%;
+}
+
+.admin-request-fields > .field-grid > .toolbar {
+  margin-top: 0;
+}
+
+.admin-intake-step:not(.internal-notes) {
+  min-width: 0;
+}
+
+.admin-group-title {
+  margin: 0;
+  padding: 10px 14px;
+  border-left: 4px solid var(--brand);
+  border-radius: 0 6px 6px 0;
+  background: #eaf1f8;
+  color: var(--brand);
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.4;
 }
 
 .admin-intake-step p {
