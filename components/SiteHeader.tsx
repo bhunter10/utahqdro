@@ -1,7 +1,24 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { navigation } from "@/lib/content";
 
 export function SiteHeader() {
+  const [accountState, setAccountState] = useState<"loading" | "signed-in" | "signed-out">("loading");
+
+  useEffect(() => {
+    if (!auth) {
+      setAccountState("signed-out");
+      return;
+    }
+    return onAuthStateChanged(auth, (user) => {
+      setAccountState(user ? "signed-in" : "signed-out");
+    });
+  }, []);
+
   return (
     <header className="topbar">
       <nav className="nav" aria-label="Main navigation">
@@ -23,9 +40,11 @@ export function SiteHeader() {
           ))}
         </div>
         <div className="nav-actions">
-          <Link className="button secondary" href="/portal">
-            Client Portal
-          </Link>
+          {accountState !== "loading" && (
+            <Link className="button secondary" href="/portal">
+              {accountState === "signed-in" ? "Client portal" : "Sign in"}
+            </Link>
+          )}
           <Link className="button primary" href="/qdro-request">
             Start QDRO
           </Link>
