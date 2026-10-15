@@ -30,9 +30,10 @@ I've set up prototype Security Rules to keep the data in Firestore safe. They ar
 ## Stripe checkout
 
 - Vercel team/project: `hunter-law/utahqdro`. The connected Stripe resource starts in a sandbox; claim it and activate Hunter Law's Stripe account before accepting live payments.
-- Checkout uses Stripe-hosted Checkout Sessions with server-defined $550 full and $275 half payments. The client must be signed in and own the saved request.
+- Checkout uses embedded Stripe Checkout Sessions with server-defined $550 full and $275 half payments. The client must be signed in and own the saved request.
 - Register `/api/webhooks/stripe` for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, and `checkout.session.async_payment_failed`. Set that endpoint's signing secret as `STRIPE_WEBHOOK_SECRET` in the matching Vercel environment. Checkout stays unavailable until this secret is configured.
 - Stripe webhook signatures are verified against the raw body. Payment records are deduplicated by Checkout Session in a Firestore transaction; two half payments total $550 before marking paid in full. Later workflow statuses are preserved.
 - A successful browser redirect never marks a request paid. Database failures return an error so Stripe retries. Failed delayed payments are recorded in the payment ledger and audit log without increasing the paid balance.
+- The payment form appears directly inside both request wizards after the request is saved. Card completion returns to the portal; payment methods requiring external authorization return through Stripe’s configured return URL. Only the webhook marks payments paid.
 - Deploy this migration before testing the public webhook. Use test keys and a sandbox endpoint for testing; use separate live keys and a live endpoint secret when launching. A restricted API key with only the required Checkout permissions is preferred.
 - The old Square webhook is removed; disable its endpoint in Square when deploying the migration. Existing recorded payment states are retained.

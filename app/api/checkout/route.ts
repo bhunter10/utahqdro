@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ message: "Invalid checkout request." }, { status: 400 });
   }
-  const { requestId, cancelPath, amountCents = 55000 } = body || {};
+  const { requestId, amountCents = 55000 } = body || {};
   if (typeof requestId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(requestId) || ![27500, 55000].includes(amountCents)) {
     return NextResponse.json({ message: "Select a valid request and payment amount." }, { status: 400 });
   }
@@ -40,12 +40,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "This amount exceeds the remaining balance." }, { status: 409 });
     }
     const appUrl = new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000");
-    const cancelUrl = new URL(typeof cancelPath === "string" && cancelPath.startsWith("/") ? cancelPath : "/qdro-request", appUrl);
-    if (cancelUrl.origin !== appUrl.origin) {
-      return NextResponse.json({ message: "Invalid return address." }, { status: 400 });
-    }
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      ui_mode: "embedded_page",
+      redirect_on_completion: "if_required",
       integration_identifier: "utahqdro_checkout_jvmkrsqa",
       client_reference_id: requestId,
       metadata: { requestId },
@@ -58,10 +56,10 @@ export async function POST(req: Request) {
         },
         quantity: 1
       }],
-      success_url: `${appUrl.origin}/portal?payment=success&request_id=${encodeURIComponent(requestId)}`,
-      cancel_url: cancelUrl.href
+      return_url: `${appUrl.origin}/portal?payment=returned&request_id=${encodeURIComponent(requestId)}`
     });
-    return NextResponse.json({ url: session.url, stripeCheckoutSessionId: session.id });
+    if (!session.client_secret) throw new Error("Missing checkout client secret");
+    return NextResponse.json({ clientSecret: session.client_secret, stripeCheckoutSessionId: session.id });
   } catch {
     return NextResponse.json({ message: "Could not start Stripe checkout. Please try again." }, { status: 502 });
   }

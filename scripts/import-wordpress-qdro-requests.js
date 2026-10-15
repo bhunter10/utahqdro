@@ -443,7 +443,7 @@ function buildFields(reader) {
     account_awardee: normalizeAwardee(reader.byHeader("Which party is being awarded some or all of this retirement account?")),
     market_adjustment: normalizeMarketAdjustment(reader.byHeader("Interest, Gains, and Losses")),
     client_signature: reader.byHeader("Please sign"),
-    total: reader.byHeader("Total") || reader.byHeader("Payment Amount")
+    total: reader.byHeader("Payment Amount") || reader.byHeader("Total")
   };
 }
 

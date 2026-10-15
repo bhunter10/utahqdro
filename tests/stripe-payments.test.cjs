@@ -6,7 +6,7 @@ const Module = require('node:module');
 const ts = require('typescript');
 const Stripe = require('stripe');
 
-function loadRoute(file, mocks) {
+function loadRoute(file, mocks, exportName = "POST") {
   const filename = path.resolve(__dirname, '..', file);
   const route = new Module(filename, module);
   route.filename = filename;
@@ -15,7 +15,7 @@ function loadRoute(file, mocks) {
   route._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
   }).outputText, filename);
-  return route.exports.POST;
+  return route.exports[exportName];
 }
 
 function setup({ state = {}, exists = true, failDb = false, badToken = false } = {}) {
@@ -37,7 +37,7 @@ function setup({ state = {}, exists = true, failDb = false, badToken = false } =
   };
   function snapshot(key) { return { exists: records.has(key), data: () => records.get(key) }; }
   const stripe = new Stripe('sk_test_fake');
-  stripe.checkout.sessions.create = async input => { created.push(input); return { id: 'cs_test', url: 'https://checkout.stripe.com/test' }; };
+  stripe.checkout.sessions.create = async input => { created.push(input); return { id: 'cs_test', client_secret: 'cs_test_secret_example' }; };
   const mocks = {
     '@/lib/firebase-admin': { getAdminDb: () => db, getAdminAuth: () => ({ verifyIdToken: async () => {
       if (badToken) throw Error('expired');
@@ -75,9 +75,9 @@ test('checkout requires a valid login and request ownership', async () => {
   assert.equal((await setup({ state: { ownerUid: 'someone-else' } }).checkout({ requestId: 'req-1' })).status, 404);
   assert.equal(s.created.length, 0);
 });
-test('checkout validates amounts, request IDs, and return URLs', async () => {
+test('checkout validates amounts and request IDs', async () => {
   const s = setup();
-  for (const body of [{ requestId: '../x' }, { requestId: 'req-1', amountCents: 1 }, { requestId: 'req-1', cancelPath: '//evil.test' }]) {
+  for (const body of [{ requestId: '../x' }, { requestId: 'req-1', amountCents: 1 }]) {
     assert.equal((await s.checkout(body)).status, 400);
   }
   assert.equal(s.created.length, 0);
@@ -89,7 +89,11 @@ test('checkout sends server prices and request references to Stripe', async () =
     const input = s.created.at(-1);
     assert.equal(input.line_items[0].price_data.unit_amount, amountCents);
     assert.equal(input.metadata.requestId, 'req-1');
-    assert.equal(input.cancel_url, 'https://example.com/qdro-request');
+    assert.equal(input.ui_mode, 'embedded_page');
+    assert.equal(input.redirect_on_completion, 'if_required');
+    assert.equal(input.return_url, 'https://example.com/portal?payment=returned&request_id=req-1');
+    assert.ok(!('success_url' in input));
+    assert.ok(!('cancel_url' in input));
     assert.ok(!('payment_method_types' in input));
   }
 });
@@ -157,4 +161,47 @@ test('bad amounts and currency cannot settle a request', async () => {
 test('database failures and unknown requests return errors so Stripe retries', async () => {
   assert.equal((await setup({ failDb: true }).webhook(event())).status, 500);
   assert.equal((await setup({ exists: false }).webhook(event())).status, 500);
+});
+
+
+test('admin totals prefer Stripe and preserve imported Square amounts', () => {
+  const total = loadRoute('lib/request-payments.ts', {}, 'getRequestTotal');
+  assert.equal(total({ stripePaidAmountCents: 27500 }), 275);
+  assert.equal(total({ stripePaidAmountCents: 55000 }), 550);
+  assert.equal(total({ stripePaidAmountCents: 0, fields: { total: '550' } }), 0);
+  assert.equal(total({ paymentState: 'paid', fields: { total: '550' } }), 550);
+  assert.equal(total({ fields: { total: '$1,250.50' } }), 1250.5);
+  assert.equal(total({ fields: { total: '275' } }), 275);
+  assert.equal(total({ fields: { payment_option: 'split' } }), 275);
+  assert.equal(total({ fields: { payment_option: 'full' } }), 550);
+  assert.equal(total({ fields: { total: '250', payment_option: 'split' } }), 250);
+  assert.equal(total({ stripePaidAmountCents: 55000, fields: { payment_option: 'split' } }), 550);
+  assert.equal(total({ stripePaidAmountCents: 27500, fields: { total: '550' } }), 275);
+  for (const value of ['', ' ', '$', 'unknown', '-100']) assert.equal(total({ fields: { total: value } }), 0);
+  assert.equal(total({ paymentState: 'waived', stripePaidAmountCents: 27500 }), 275);
+  for (const value of [undefined, null, '55000', NaN, Infinity, -1, 12.5]) {
+    assert.equal(total({ stripePaidAmountCents: value }), 0);
+  }
+});
+
+test('admin requests API carries the Stripe balance through to the displayed total', async () => {
+  const stored = [27500, 55000, 0, undefined, -1, '55000'];
+  const query = { orderBy: () => query, limit: () => query, get: async () => ({
+    docs: stored.map((amount, index) => ({ id: `req-${index}`, data: () => ({
+      ownerUid: 'client', stripePaidAmountCents: amount, fields: { total: '999' }
+    }) }))
+  }) };
+  const get = loadRoute('app/api/admin/requests/route.ts', {
+    '@/lib/field-format': { normalizePartyNames: fields => fields },
+    '@/lib/admin-api': { requireAdminRequest: async () => ({ ok: true, uid: 'admin' }) },
+    '@/lib/ai-intake': {},
+    '@/lib/firebase-admin': { getAdminDb: () => ({ collection: () => query }) },
+    '@/lib/types': { requestStatuses: ['Pending'] }
+  }, 'GET');
+  const response = await get(new Request('https://example.com/api/admin/requests'));
+  assert.equal(response.status, 200);
+  const { requests } = await response.json();
+  const total = loadRoute('lib/request-payments.ts', {}, 'getRequestTotal');
+  assert.deepEqual(requests.map(total), [275, 550, 0, 999, 999, 999]);
+  assert.equal(requests[0].stripePaidAmountCents, 27500);
 });

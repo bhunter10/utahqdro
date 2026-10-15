@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -48,12 +49,19 @@ const iraBlocker =
 
 type WizardData = Record<string, string | boolean>;
 
+const StripeCheckout = dynamic(() => import("./StripeCheckout").then((module) => module.StripeCheckout), {
+  ssr: false,
+  loading: () => <p role="status">Loading secure payment form…</p>
+});
+
 const storageKey = "utah-qdro-intake";
 const FULL_PAYMENT_CENTS = 55000;
 const HALF_PAYMENT_CENTS = 27500;
 
 
 export function IntakeWizard() {
+  const [checkoutSecret, setCheckoutSecret] = useState("");
+  const [checkoutRequestId, setCheckoutRequestId] = useState("");
   const [activeStep, setActiveStep] = useState(-2);
   const [ready, setReady] = useState<Record<string, boolean>>({});
   const [data, setData] = useState<WizardData>({});
@@ -76,6 +84,7 @@ export function IntakeWizard() {
       return;
     }
     return onAuthStateChanged(auth, (currentUser) => {
+      setCheckoutSecret("");
       setClientUser(currentUser);
       setAuthReady(true);
       if (currentUser?.email) {
@@ -275,10 +284,11 @@ export function IntakeWizard() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth?.currentUser?.getIdToken()}` },
         body: JSON.stringify({ requestId, amountCents: paymentAmountCents })
       });
-      const payload = (await response.json()) as { url?: string; message?: string };
+      const payload = (await response.json()) as { clientSecret?: string; message?: string };
       setSubmitted(true);
-      if (payload.url) {
-        window.location.href = payload.url;
+      if (response.ok && payload.clientSecret) {
+        setCheckoutRequestId(requestId);
+        setCheckoutSecret(payload.clientSecret);
         return;
       }
       alert(payload.message || "Your request has been saved as Payment Pending. Credit card payments are not available yet.");
@@ -334,6 +344,8 @@ export function IntakeWizard() {
 
   const readinessChecksBeforeIra = readinessChecks.slice(0, -1);
   const finalReadinessCheck = readinessChecks[readinessChecks.length - 1];
+
+  if (checkoutSecret && clientUser) return <StripeCheckout clientSecret={checkoutSecret} requestId={checkoutRequestId} />;
 
   return (
     <div className="form-layout">
@@ -453,7 +465,7 @@ export function IntakeWizard() {
             <section className="panel">
               <span className="status info">Payment</span>
               <p style={{ marginTop: 18 }}>
-                You’ll enter your payment and billing details securely on Stripe after submitting this request.
+                You’ll enter your payment and billing details in a secure form here after submitting this request.
               </p>
               <fieldset className="field full-field radio-field" style={{ marginTop: 22 }}>
                 <legend>Payment options</legend>
@@ -683,9 +695,12 @@ function AccountSetupStep({
   if (clientUser) {
     return (
       <section className="panel">
-        <span className="status info">Account ready</span>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <span className="status info">Account ready</span>
+          <span>Signed in as {clientUser.email}.</span>
+        </div>
         <p>
-          Signed in as {clientUser.email}. Continue the QDRO request and your
+          Continue the QDRO request and your
           progress will stay connected to this account.
         </p>
         <div className="toolbar">

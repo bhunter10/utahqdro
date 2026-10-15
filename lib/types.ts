@@ -103,6 +103,7 @@ export type QdroRequest = {
   clientEmail: string;
   status: RequestStatus;
   paymentState: PaymentState;
+  stripePaidAmountCents?: number;
   signatureState: SignatureState;
   templateFamily: string;
   fields: Record<string, string | boolean>;

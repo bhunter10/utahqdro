@@ -1,5 +1,6 @@
 "use client";
 
+import { getRequestTotal } from "@/lib/request-payments";
 import { useId, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getRequesterIdentity, normalizeAiFieldValue } from "@/lib/ai-intake";
@@ -1798,18 +1799,6 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
-
-function getRequestTotal(request: QdroRequest) {
-  if (request.paymentState === "waived") return 0;
-
-  const fieldTotal = request.fields.total;
-  if (typeof fieldTotal === "string") {
-    const numericTotal = Number(fieldTotal.replace(/[$,]/g, ""));
-    if (Number.isFinite(numericTotal)) return numericTotal;
-  }
-
-  return 550;
 }
 
 function formatCurrency(amount: number) {

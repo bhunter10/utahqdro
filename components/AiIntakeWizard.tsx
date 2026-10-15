@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -56,9 +57,15 @@ const iraWarning =
 type WizardData = Record<string, string | boolean>;
 type Stage = "readiness" | "account" | "uploads" | "missing" | "confirm" | "sign-pay" | "submitted";
 
+const StripeCheckout = dynamic(() => import("./StripeCheckout").then((module) => module.StripeCheckout), {
+  ssr: false,
+  loading: () => <p role="status">Loading secure payment form…</p>
+});
+
 const storageKey = "utah-qdro-ai-intake";
 
 export function AiIntakeWizard() {
+  const [checkoutSecret, setCheckoutSecret] = useState("");
   const [stage, setStage] = useState<Stage>("readiness");
   const [isDraftLoaded, setIsDraftLoaded] = useState(false);
   const [ready, setReady] = useState<Record<string, boolean>>({});
@@ -82,6 +89,7 @@ export function AiIntakeWizard() {
       return;
     }
     return onAuthStateChanged(auth, (currentUser) => {
+      setCheckoutSecret("");
       setClientUser(currentUser);
       setAuthReady(true);
       if (currentUser?.email) {
@@ -434,9 +442,9 @@ export function AiIntakeWizard() {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth?.currentUser?.getIdToken()}` },
       body: JSON.stringify({ requestId, cancelPath: "/qdro-request-ai" })
     });
-    const payload = (await response.json()) as { url?: string; message?: string };
-    if (payload.url) {
-      window.location.href = payload.url;
+    const payload = (await response.json()) as { clientSecret?: string; message?: string };
+    if (response.ok && payload.clientSecret) {
+      setCheckoutSecret(payload.clientSecret);
       return;
     }
 
@@ -473,6 +481,8 @@ export function AiIntakeWizard() {
   if (!isDraftLoaded) {
     return null;
   }
+
+  if (checkoutSecret && clientUser) return <StripeCheckout clientSecret={checkoutSecret} requestId={requestId} />;
 
   return (
     <div className="form-layout ai-intake-layout">

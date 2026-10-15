@@ -151,6 +151,9 @@ function normalizeRequest(id: string, data: FirebaseFirestore.DocumentData): Qdr
     clientEmail: String(data.clientEmail || ""),
     status: normalizeStatus(data.status),
     paymentState: data.paymentState === "pending" || data.paymentState === "paid" || data.paymentState === "waived" ? data.paymentState : "unpaid",
+    stripePaidAmountCents: typeof data.stripePaidAmountCents === "number" && Number.isSafeInteger(data.stripePaidAmountCents) && data.stripePaidAmountCents >= 0
+      ? data.stripePaidAmountCents
+      : undefined,
     signatureState:
       data.signatureState === "sent" || data.signatureState === "partially_signed" || data.signatureState === "completed"
         ? data.signatureState
