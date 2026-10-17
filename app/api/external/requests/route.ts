@@ -2,12 +2,13 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { normalizeAllCapsName, normalizePartyNames } from "@/lib/field-format";
-import { requestStatuses, type PaymentState, type QdroRequest, type RequestFile, type RequestNote, type RequestStatus, type SignatureState } from "@/lib/types";
+import { requestStatuses, type PaymentState, type QdroRequest, type RequestFile, type RequestNote, type RequestHistoryEntry, type RequestStatus, type SignatureState } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 type ExternalAccessLevel = "redacted" | "owner";
 type ExternalWriteRequest = {
+  historyEntry?: Omit<RequestHistoryEntry, "createdAt"> & { createdAt?: string };
   requestId?: string;
   clientName?: string;
   clientEmail?: string;
@@ -60,6 +61,8 @@ const ownerBlockedFieldPatterns = [
 ];
 const paymentStates = ["unpaid", "pending", "paid", "waived"] as const;
 const signatureStates = ["not_started", "sent", "partially_signed", "completed"] as const;
+
+class HistoryInputError extends Error {}
 
 export async function GET(req: Request) {
   const authResult = authorizeExternalRequest(req);
@@ -123,7 +126,7 @@ export async function PATCH(req: Request) {
       if (!snapshot.exists) return null;
 
       const current = normalizeRequest(snapshot.id, snapshot.data() || {});
-      const update = buildExternalUpdate(body, current.notes, current.fields);
+      const update = buildExternalUpdate(body, current.notes, current.fields, current.history || []);
       if (!Object.keys(update).length) {
         throw new Error("No supported changes were provided.");
       }
@@ -146,7 +149,7 @@ export async function PATCH(req: Request) {
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : "Could not update external request data." },
-      { status: 500 }
+      { status: error instanceof HistoryInputError ? 400 : 500 }
     );
   }
 }
@@ -194,8 +197,33 @@ function sanitizeLimit(value: string | null) {
   return Math.min(Math.max(Math.trunc(parsed), 1), 100);
 }
 
-function buildExternalUpdate(body: ExternalWriteRequest, currentNotes: RequestNote[], currentFields: QdroRequest["fields"]) {
+function buildExternalUpdate(body: ExternalWriteRequest, currentNotes: RequestNote[], currentFields: QdroRequest["fields"], currentHistory: RequestHistoryEntry[]) {
   const update: Partial<QdroRequest> = {};
+  if (body.historyEntry !== undefined) {
+    const entry = body.historyEntry;
+    if (!entry || typeof entry !== "object" || typeof entry.id !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(entry.id)
+      || !["step_change", "email", "followup", "other"].includes(entry.type)
+      || typeof entry.body !== "string" || !entry.body.trim() || entry.body.length > 2000
+      || (entry.createdAt !== undefined && (typeof entry.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(entry.createdAt) || !Number.isFinite(Date.parse(entry.createdAt))))) {
+      throw new HistoryInputError("historyEntry requires a unique id, a supported type, a body of 1–2000 characters, and an optional ISO timestamp with timezone.");
+    }
+    const existing = currentHistory.find((item) => item.id === entry.id);
+    if (existing) {
+      if (existing.type !== entry.type || existing.body !== entry.body.trim()
+        || (entry.createdAt !== undefined && existing.createdAt !== new Date(entry.createdAt).toISOString())) {
+        throw new HistoryInputError("That history entry id already exists with different content. History is append-only.");
+      }
+      update.history = currentHistory;
+    } else {
+      if (currentHistory.length >= 250) throw new HistoryInputError("History is full (250 entries). No existing entries were removed.");
+      update.history = [...currentHistory, {
+        id: entry.id,
+        type: entry.type,
+        body: entry.body.trim(),
+        createdAt: entry.createdAt === undefined ? new Date().toISOString() : new Date(entry.createdAt).toISOString()
+      }];
+    }
+  }
   const fieldUpdates = filterOwnerWritableFields(body.fields);
 
   if (body.clientName !== undefined) {
@@ -306,7 +334,8 @@ function toOwnerExternalRequest(request: QdroRequest) {
     updatedAt: request.updatedAt,
     fields: filterOwnerFields(request.fields),
     files: request.files,
-    notes: request.notes
+    notes: request.notes,
+    history: request.history || []
   };
 }
 
@@ -323,6 +352,7 @@ function normalizeRequest(id: string, data: FirebaseFirestore.DocumentData): Qdr
     fields: data.fields && typeof data.fields === "object" ? data.fields : {},
     files: Array.isArray(data.files) ? data.files : [],
     notes: Array.isArray(data.notes) ? data.notes : [],
+    history: Array.isArray(data.history) ? data.history : [],
     createdAt: String(data.createdAt || ""),
     updatedAt: String(data.updatedAt || "")
   };

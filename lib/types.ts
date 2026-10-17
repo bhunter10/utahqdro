@@ -96,6 +96,13 @@ export type RequestNote = {
   createdAt: string;
 };
 
+export type RequestHistoryEntry = {
+  id: string;
+  type: "step_change" | "email" | "followup" | "other";
+  body: string;
+  createdAt: string;
+};
+
 export type QdroRequest = {
   id: string;
   ownerUid: string;
@@ -109,6 +116,7 @@ export type QdroRequest = {
   fields: Record<string, string | boolean>;
   files: RequestFile[];
   notes: RequestNote[];
+  history?: RequestHistoryEntry[];
   createdAt: string;
   updatedAt: string;
 };
