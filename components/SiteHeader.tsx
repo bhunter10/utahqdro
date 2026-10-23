@@ -18,6 +18,17 @@ export function SiteHeader() {
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const navRef = useRef<HTMLElement>(null);
+  const accountMenu = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    const closeAccountMenu = (event: PointerEvent) => {
+      if (!accountMenu.current?.contains(event.target as Node) && accountMenu.current) {
+        accountMenu.current.open = false;
+      }
+    };
+    document.addEventListener("pointerdown", closeAccountMenu);
+    return () => document.removeEventListener("pointerdown", closeAccountMenu);
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -89,15 +100,15 @@ export function SiteHeader() {
             {menuOpen ? <path d="m6 6 12 12M6 18 18 6" /> : <path d="M3 6h18M3 12h18M3 18h18" />}
           </svg>
         </button>
-        <Link className="brand" href="/" aria-label="UtahQDRO home" onClick={() => setMenuOpen(false)}>
+        <Link className="brand" href="/" aria-label="Utah QDRO home" onClick={() => setMenuOpen(false)}>
           <img
             className="brand-mark"
-            src="/utahqdro-mark.png?v=2"
+            src="/utah-qdro-mark-v6.png"
             alt=""
-            width={56}
-            height={56}
+            width={88}
+            height={88}
           />
-          <span>UtahQDRO</span>
+          <span>Utah QDRO</span>
         </Link>
         <div className={`nav-links${menuOpen ? " is-open" : ""}`} id="header-page-links">
           {navigation.map((item) => (
@@ -113,7 +124,7 @@ export function SiteHeader() {
             </Link>
           )}
           {accountState === "signed-in" && (
-            <span className="nav-account-status" role="status">
+            <span className="nav-account-status desktop-account-control" role="status">
               Signed in
               {accountEmail && (
                 <span className="nav-account-email" title={accountEmail}>{accountEmail}</span>
@@ -121,7 +132,7 @@ export function SiteHeader() {
             </span>
           )}
           {accountState === "signed-in" && (
-            <Link className="button secondary" href="/portal" onClick={() => setMenuOpen(false)}>
+            <Link className="button secondary desktop-account-control" href="/portal" onClick={() => setMenuOpen(false)}>
               Client portal
             </Link>
           )}
@@ -132,9 +143,39 @@ export function SiteHeader() {
             }}>Sign in</button>
           )}
           {accountState === "signed-in" && (
-            <button className="button ghost" type="button" onClick={handleSignOut} disabled={isSigningOut}>
+            <button className="button ghost desktop-account-control" type="button" onClick={handleSignOut} disabled={isSigningOut}>
               {isSigningOut ? "Signing out…" : "Sign out"}
             </button>
+          )}
+          {accountState === "signed-in" && (
+            <details className="mobile-account-menu" ref={accountMenu} onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.currentTarget.open = false;
+                event.currentTarget.querySelector("summary")?.focus();
+              }
+            }}>
+              <summary>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <circle cx="12" cy="8" r="4" />
+                  <path d="M4 21v-2a8 8 0 0 1 16 0v2" />
+                </svg>
+                Account
+                <svg className="account-menu-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+              </summary>
+              <div className="mobile-account-panel">
+                <div className="mobile-account-identity">
+                  <span className="mobile-account-label">Signed in</span>
+                  {accountEmail && <span className="mobile-account-address">{accountEmail}</span>}
+                </div>
+                <Link href="/portal" onClick={() => {
+                  if (accountMenu.current) accountMenu.current.open = false;
+                  setMenuOpen(false);
+                }}>Client portal <span aria-hidden="true">→</span></Link>
+                <button type="button" onClick={handleSignOut} disabled={isSigningOut}>
+                  {isSigningOut ? "Signing out…" : "Sign out"}
+                </button>
+              </div>
+            </details>
           )}
         </div>
       </nav>

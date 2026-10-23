@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     "Guided QDRO preparation for Utah divorce cases with secure intake, document previews, payment, signatures, and status tracking.",
   icons: {
-    icon: "/favicon.svg"
+    icon: "/utah-qdro-mark-v6.png"
   }
 };
 

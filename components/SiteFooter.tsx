@@ -8,12 +8,12 @@ export function SiteFooter() {
           <div className="brand">
             <img
               className="brand-mark"
-              src="/utahqdro-mark.png?v=2"
+              src="/utah-qdro-mark-v6.png"
               alt=""
-              width={56}
-              height={56}
+              width={88}
+              height={88}
             />
-            <span>UtahQDRO</span>
+            <span>Utah QDRO</span>
           </div>
           <p>
             UtahQDRO prepares accurate, court-ready retirement division orders for

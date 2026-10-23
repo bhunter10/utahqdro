@@ -3,7 +3,7 @@ export default function ContactPage() {
     <main className="page contact-page">
       <section className="section contact-intro">
         <div className="contact-intro-copy">
-          <div className="eyebrow">Contact UtahQDRO</div>
+          <div className="eyebrow">Contact Utah QDRO</div>
           <h1>Send us a question.</h1>
           <form className="contact-form contact-form-embedded">
             <div className="field-grid">

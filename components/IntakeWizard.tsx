@@ -504,24 +504,26 @@ export function IntakeWizard() {
               </p>
               <fieldset className="field full-field radio-field" style={{ marginTop: 22 }}>
                 <legend>Payment options</legend>
-                <label className="choice">
-                  <input
-                    type="radio"
-                    name="payment_option"
-                    checked={data.payment_option === "full"}
-                    onChange={() => updateField("payment_option", "full")}
-                  />
-                  <span>I am paying in full myself ($550)</span>
-                </label>
-                <label className="choice">
-                  <input
-                    type="radio"
-                    name="payment_option"
-                    checked={data.payment_option === "split"}
-                    onChange={() => updateField("payment_option", "split")}
-                  />
-                  <span>I am paying half and the other party is paying half ($275)</span>
-                </label>
+                <div className="choice-row">
+                  <label className="choice">
+                    <input
+                      type="radio"
+                      name="payment_option"
+                      checked={data.payment_option === "full"}
+                      onChange={() => updateField("payment_option", "full")}
+                    />
+                    <span>I am paying in full myself ($550)</span>
+                  </label>
+                  <label className="choice">
+                    <input
+                      type="radio"
+                      name="payment_option"
+                      checked={data.payment_option === "split"}
+                      onChange={() => updateField("payment_option", "split")}
+                    />
+                    <span>I am paying half and the other party is paying half ($275)</span>
+                  </label>
+                </div>
                 {data.payment_option === "split" && (
                   <small>
                     When using this option, you will pay your half and a payment request will be sent to the other party for payment. No
