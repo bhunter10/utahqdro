@@ -1,12 +1,14 @@
 "use client";
 
+import { signInWithMigration } from "@/lib/client-sign-in";
+
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  updateProfile,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
-  signInWithEmailAndPassword,
   type User
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
@@ -49,6 +51,20 @@ const iraBlocker =
 
 type WizardData = Record<string, string | boolean>;
 
+function partyDisplayLabel(party: string, data: WizardData) {
+  const name = data[party === "Party 1" ? "party1_name" : "party2_name"];
+  return typeof name === "string" && name.trim() ? `${name.trim()} (${party})` : party;
+}
+
+function wizardOptionLabel(fieldId: string, option: string, data: WizardData) {
+  const party = option.match(/^Party [12](?=\s|$)/)?.[0];
+  if (party) {
+    const label = partyDisplayLabel(party, data);
+    if (label !== party) return label;
+  }
+  return formatFieldOptionLabel(fieldId, option);
+}
+
 const StripeCheckout = dynamic(() => import("./StripeCheckout").then((module) => module.StripeCheckout), {
   ssr: false,
   loading: () => <p role="status">Loading secure payment form…</p>
@@ -69,6 +85,7 @@ export function IntakeWizard() {
   const [submitted, setSubmitted] = useState(false);
   const [clientUser, setClientUser] = useState<User | null>(null);
   const [accountMode, setAccountMode] = useState<"create" | "sign-in">("create");
+  const [accountFullName, setAccountFullName] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
   const [accountPassword, setAccountPassword] = useState("");
   const [accountMessage, setAccountMessage] = useState("");
@@ -85,13 +102,13 @@ export function IntakeWizard() {
     }
     return onAuthStateChanged(auth, (currentUser) => {
       setCheckoutSecret("");
+      setDraftRestored(false);
       setClientUser(currentUser);
       setAuthReady(true);
       if (currentUser?.email) {
         setAccountEmail(currentUser.email);
         setData((current) => current.party1_email ? current : { ...current, party1_email: currentUser.email || "" });
       } else {
-        window.localStorage.removeItem(storageKey);
         setActiveStep(-2);
         setReady({});
         setData({});
@@ -107,55 +124,61 @@ export function IntakeWizard() {
   useEffect(() => {
     if (!authReady || draftRestored) return;
 
-    const saved = window.localStorage.getItem(storageKey);
-    if (saved) {
-      const parsed = JSON.parse(saved) as {
-        data?: WizardData;
-        ready?: Record<string, boolean>;
-        ownerUid?: string;
-        ownerEmail?: string;
-      };
-      const savedOwnerUid = parsed.ownerUid || "";
-      const savedOwnerEmail = parsed.ownerEmail || "";
-      const currentEmail = clientUser?.email || "";
-      const belongsToCurrentUser =
-        clientUser && (savedOwnerUid ? savedOwnerUid === clientUser.uid : savedOwnerEmail ? savedOwnerEmail === currentEmail : false);
+    if (!clientUser) {
+      setDraftRestored(true);
+      return;
+    }
+    const accountStorageKey = `${storageKey}:${clientUser.uid}`;
+    const saved = window.localStorage.getItem(accountStorageKey) || window.localStorage.getItem(storageKey);
+    try {
+      if (saved) {
+        const parsed = JSON.parse(saved) as {
+          data?: WizardData;
+          ready?: Record<string, boolean>;
+          ownerUid?: string;
+          ownerEmail?: string;
+        };
+        const savedOwnerUid = parsed.ownerUid || "";
+        const savedOwnerEmail = parsed.ownerEmail || "";
+        const currentEmail = clientUser?.email || "";
+        const belongsToCurrentUser =
+          clientUser && (savedOwnerUid ? savedOwnerUid === clientUser.uid : savedOwnerEmail ? savedOwnerEmail === currentEmail : false);
 
-      if (belongsToCurrentUser) {
-        const restoredData = { ...parsed.data };
-        // Draft storage retains text, but cannot restore local File objects.
-        for (const step of intakeSteps) {
-          for (const field of step.fields) {
-            if (field.type === "file") delete restoredData[field.id];
+        if (belongsToCurrentUser) {
+          const restoredData = { ...parsed.data };
+          // Draft storage retains text, but cannot restore local File objects.
+          for (const step of intakeSteps) {
+            for (const field of step.fields) {
+              if (field.type === "file") delete restoredData[field.id];
+            }
+          }
+          setData(restoredData);
+          setReady(parsed.ready || {});
+          if (readinessChecks.every((check) => parsed.ready?.[check.id]) && isIraScreeningComplete(parsed.data || {})) {
+            setActiveStep(-1);
           }
         }
-        setData(restoredData);
-        setReady(parsed.ready || {});
-        if (readinessChecks.every((check) => parsed.ready?.[check.id]) && isIraScreeningComplete(parsed.data || {})) {
-          setActiveStep(-1);
-        }
-      } else {
-        window.localStorage.removeItem(storageKey);
       }
+    } catch {
+      window.localStorage.removeItem(accountStorageKey);
+    } finally {
+      setDraftRestored(true);
     }
-    setDraftRestored(true);
   }, [authReady, clientUser, draftRestored]);
 
   useEffect(() => {
     if (!draftRestored || !clientUser) return;
-    const handle = window.setTimeout(() => {
-      window.localStorage.setItem(
-        storageKey,
-        JSON.stringify({
-          data,
-          ready,
-          ownerUid: clientUser.uid,
-          ownerEmail: clientUser.email || ""
-        })
-      );
-      setSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
-    }, 350);
-    return () => window.clearTimeout(handle);
+    window.localStorage.setItem(
+      `${storageKey}:${clientUser.uid}`,
+      JSON.stringify({
+        data,
+        ready,
+        ownerUid: clientUser.uid,
+        ownerEmail: clientUser.email || ""
+      })
+    );
+    setSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+
   }, [clientUser, data, draftRestored, ready]);
 
   const iraScreeningComplete = isIraScreeningComplete(data);
@@ -306,6 +329,11 @@ export function IntakeWizard() {
       return;
     }
 
+    if (accountMode === "create" && !accountFullName.trim()) {
+      setAccountMessage("Please enter your full name.");
+      return;
+    }
+
     try {
       setIsAccountSubmitting(true);
       if (accountMode === "create") {
@@ -313,13 +341,14 @@ export function IntakeWizard() {
         await setDoc(doc(db, "users", credential.user.uid), {
           uid: credential.user.uid,
           email: credential.user.email || accountEmail,
-          displayName: credential.user.email || accountEmail,
+          displayName: accountFullName.trim(),
           role: "client",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
+        await updateProfile(credential.user, { displayName: accountFullName.trim() });
       } else {
-        await signInWithEmailAndPassword(auth, accountEmail, accountPassword);
+        await signInWithMigration(auth, accountEmail, accountPassword);
       }
       setData((current) => current.party1_email ? current : { ...current, party1_email: accountEmail });
       setActiveStep(0);
@@ -334,7 +363,11 @@ export function IntakeWizard() {
     const nextData = { ...data };
     delete nextData.is_ira;
     delete nextData.ira_admin_confirmed;
-    window.localStorage.setItem(storageKey, JSON.stringify({ data: nextData, ready: {} }));
+    if (clientUser) {
+      window.localStorage.setItem(`${storageKey}:${clientUser.uid}`, JSON.stringify({
+        data: nextData, ready: {}, ownerUid: clientUser.uid, ownerEmail: clientUser.email || ""
+      }));
+    }
     setActiveStep(-2);
     setReady({});
     setData(nextData);
@@ -437,6 +470,8 @@ export function IntakeWizard() {
           </section>
         ) : activeStep === -1 || !accountComplete ? (
           <AccountSetupStep
+            accountFullName={accountFullName}
+            setAccountFullName={setAccountFullName}
             accountEmail={accountEmail}
             accountMessage={accountMessage}
             accountMode={accountMode}
@@ -664,6 +699,8 @@ function IraReadinessGate({
 }
 
 function AccountSetupStep({
+  accountFullName,
+  setAccountFullName,
   accountEmail,
   accountMessage,
   accountMode,
@@ -678,6 +715,8 @@ function AccountSetupStep({
   setAccountMode,
   setAccountPassword
 }: {
+  accountFullName: string;
+  setAccountFullName: (value: string) => void;
   accountEmail: string;
   accountMessage: string;
   accountMode: "create" | "sign-in";
@@ -723,6 +762,14 @@ function AccountSetupStep({
         future updates tied to one secure place.
       </p>
       <div className="field-grid one">
+          {accountMode === "create" && (
+            <>
+              <div className="field">
+                <label htmlFor="intake-full-name">Full name</label>
+                <input className="input" id="intake-full-name" autoComplete="name" required value={accountFullName} onChange={(event) => setAccountFullName(event.target.value)} />
+              </div>
+            </>
+          )}
         <div className="field">
           <label htmlFor="intake-account-email">Email</label>
           <input
@@ -749,7 +796,7 @@ function AccountSetupStep({
         <button className="button secondary" type="button" onClick={onBack}>
           Back
         </button>
-        <button className="button primary" type="button" onClick={onSubmit} disabled={isAccountSubmitting || !accountEmail || !accountPassword}>
+        <button className="button primary" type="button" onClick={onSubmit} disabled={isAccountSubmitting || !accountEmail || !accountPassword || (accountMode === "create" && !accountFullName.trim())}>
           {isAccountSubmitting ? "Working..." : accountMode === "create" ? "Create account and continue" : "Sign in and continue"}
         </button>
       </div>
@@ -856,7 +903,7 @@ function WizardPartyFieldGroups({
       )}
       <section className="party-field-group">
         <div className="party-field-group-head">
-          <span className="status info">Party 1</span>
+          <span className="status info">{partyDisplayLabel("Party 1", data)}</span>
         </div>
         <div className="field-grid">
           {party1Fields.map((field) => (
@@ -866,7 +913,7 @@ function WizardPartyFieldGroups({
       </section>
       <section className="party-field-group party-field-group-secondary">
         <div className="party-field-group-head">
-          <span className="status info">Party 2</span>
+          <span className="status info">{partyDisplayLabel("Party 2", data)}</span>
         </div>
         <div className="field-grid">
           {party2Fields.map((field) => (
@@ -907,10 +954,29 @@ function FieldControl({
   const conditionalHelp = getConditionalHelp(field, data);
   const fieldClassName = ["field", (field.fullWidth || /_address_(street|line2|city)$/.test(field.id)) ? "full-field" : "", field.constrained ? "constrained-field" : ""].filter(Boolean).join(" ");
 
+  if (field.id === "account_awardee") {
+    const owner = typeof data.account_owner === "string" && data.account_owner.startsWith("Party 1")
+      ? "Party 1"
+      : typeof data.account_owner === "string" && data.account_owner.startsWith("Party 2")
+        ? "Party 2"
+        : null;
+    const recipient = owner === "Party 1" ? "Party 2" : "Party 1";
+
+    return (
+      <div className="field full-field">
+        <p>
+          {owner
+            ? `${partyDisplayLabel(recipient, data)} will receive a share of the retirement account owned by ${partyDisplayLabel(owner, data)}. You’ll specify that share in the next step.`
+            : "Select the current account owner above to confirm who will receive a share of the retirement account."}
+        </p>
+      </div>
+    );
+  }
+
   if (field.type === "radio") {
     return (
       <fieldset className="field full-field radio-field">
-        <legend>{field.label}</legend>
+        <legend>{field.id === "account_owner" ? <>Which party is the <u>current</u> owner of the retirement account?</> : field.label}</legend>
         {field.help && <small>{field.help}</small>}
         {conditionalHelp && <small>{conditionalHelp}</small>}
         <div className="choice-row">
@@ -920,10 +986,9 @@ function FieldControl({
                 type="radio"
                 name={field.id}
                 checked={value === option}
-                disabled={field.id === "account_awardee" && typeof data.account_owner === "string" && option.slice(0, 7) === data.account_owner.slice(0, 7)}
                 onChange={() => onChange(option)}
               />
-              <span>{formatFieldOptionLabel(field.id, option)}</span>
+              <span>{wizardOptionLabel(field.id, option, data)}</span>
             </label>
           ))}
         </div>
@@ -941,7 +1006,7 @@ function FieldControl({
           <option value="">Choose one</option>
           {field.options?.map((option) => (
             <option value={option} key={option}>
-              {formatFieldOptionLabel(field.id, option)}
+              {wizardOptionLabel(field.id, option, data)}
             </option>
           ))}
         </select>

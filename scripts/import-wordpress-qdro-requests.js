@@ -10,6 +10,7 @@ const defaultInput = path.join(process.cwd(), "private-imports", "qdro-request-2
 const args = new Set(process.argv.slice(2));
 const write = args.has("--write");
 const replaceExisting = args.has("--replace-existing");
+const linkOwnersOnly = args.has("--link-owners-only");
 const inputArg = process.argv.find((arg) => arg.startsWith("--input="));
 const limitArg = process.argv.find((arg) => arg.startsWith("--limit="));
 const statusArg = process.argv.find((arg) => arg.startsWith("--status="));
@@ -492,7 +493,9 @@ function buildRequest(headers, row) {
 
   return {
     id,
-    ownerUid: `wordpress-import-${entryId || "unknown"}`,
+    ownerUid: /^[1-9]\d*$/.test(reader.byHeader("Created By (User Id)"))
+      ? `wordpress-user-${reader.byHeader("Created By (User Id)")}`
+      : `wordpress-import-${entryId || "unknown"}`,
     clientName: client.name,
     clientEmail: client.email,
     status,
@@ -560,7 +563,12 @@ async function existingRequestsById(db, ids) {
 }
 
 function preserveMigratedFiles(request, existingRequest) {
-  if (!existingRequest || !Array.isArray(existingRequest.files) || !Array.isArray(request.files)) return request;
+  if (!existingRequest) return request;
+  request = {
+    ...request,
+    ownerUid: existingRequest.ownerUid?.startsWith("wordpress-import-") ? request.ownerUid : existingRequest.ownerUid || request.ownerUid
+  };
+  if (!Array.isArray(existingRequest.files) || !Array.isArray(request.files)) return request;
 
   const existingById = new Map(
     existingRequest.files
@@ -600,6 +608,7 @@ async function main() {
     .filter((id, index, ids) => ids.indexOf(id) !== index);
 
   console.log(`mode=${write ? "write" : "dry-run"}`);
+  console.log(`requestsWithWordPressOwner=${requests.filter((request) => request.ownerUid.startsWith("wordpress-user-")).length}`);
   console.log(`replaceExisting=${replaceExisting ? "yes" : "no"}`);
   console.log(`input=${inputPath}`);
   console.log(`statusFilter=${statusFilter || "none"}`);
@@ -630,6 +639,23 @@ async function main() {
   }
 
   const db = getFirestore();
+  if (linkOwnersOnly) {
+    let linked = 0;
+    for (const request of requests) {
+      if (!request.ownerUid.startsWith("wordpress-user-")) continue;
+      const ref = db.collection("requests").doc(request.id);
+      const changed = await db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(ref);
+        const existing = snapshot.data();
+        if (!existing || typeof existing.ownerUid !== "string" || !existing.ownerUid.startsWith("wordpress-import-")) return false;
+        tx.update(ref, { ownerUid: request.ownerUid });
+        return true;
+      });
+      if (changed) linked += 1;
+    }
+    console.log(`linkedOwners=${linked}`);
+    return;
+  }
   const existingRequestMap = await existingRequestsById(db, requests.map((request) => request.id));
   const existing = new Set(existingRequestMap.keys());
   if (existing.size && !replaceExisting) {

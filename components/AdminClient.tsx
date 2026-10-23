@@ -1323,6 +1323,20 @@ function RequestEditor({
   );
 }
 
+function adminPartyLabel(party: string, request: QdroRequest) {
+  const name = request.fields[party === "Party 1" ? "party1_name" : "party2_name"];
+  return typeof name === "string" && name.trim() ? `${name.trim()} (${party})` : party;
+}
+
+function adminOptionLabel(fieldId: string, option: string, request: QdroRequest) {
+  const party = option.match(/^Party [12](?=\s|$)/)?.[0];
+  if (party) {
+    const label = adminPartyLabel(party, request);
+    if (label !== party) return label;
+  }
+  return formatFieldOptionLabel(fieldId, option);
+}
+
 function AdminFieldControl({
   field,
   request,
@@ -1356,10 +1370,27 @@ function AdminFieldControl({
   const fieldClassName = ["field", field.fullWidth || isStreetAddress ? "full-field" : "", field.constrained && !isStreetAddress ? "constrained-field" : ""].filter(Boolean).join(" ");
   const options = getAdminFieldOptions(field);
 
+  if (field.id === "account_awardee") {
+    const rawOwner = request.fields.account_owner;
+    const owner = typeof rawOwner === "string" && rawOwner.startsWith("Party 1")
+      ? "Party 1"
+      : typeof rawOwner === "string" && rawOwner.startsWith("Party 2")
+        ? "Party 2"
+        : null;
+    const recipient = owner === "Party 1" ? "Party 2" : "Party 1";
+    return (
+      <div className="field full-field">
+        <small>{owner
+          ? <><strong>{adminPartyLabel(recipient, request)}</strong> will receive a share of the retirement account owned by {adminPartyLabel(owner, request)}.</>
+          : "Select the current account owner above to confirm who will receive a share of the retirement account."}</small>
+      </div>
+    );
+  }
+
   if (field.type === "radio") {
     return (
       <fieldset className="field full-field radio-field">
-        <legend>{field.label}</legend>
+        <legend>{field.id === "account_owner" ? <>Which party is the <u>current</u> owner of the retirement account?</> : field.label}</legend>
         {help && <small>{help}</small>}
         <div className="choice-row">
           {options.map((option) => (
@@ -1370,7 +1401,7 @@ function AdminFieldControl({
                 checked={value === option}
                 onChange={() => updateField(request.id, field.id, option)}
               />
-              <span>{formatFieldOptionLabel(field.id, option)}</span>
+              <span>{adminOptionLabel(field.id, option, request)}</span>
             </label>
           ))}
         </div>
@@ -1504,7 +1535,7 @@ function AdminPartyFieldGroups({
       )}
       <section className="party-field-group">
         <div className="party-field-group-head">
-          <h3 className="admin-group-title">Party 1</h3>
+          <h3 className="admin-group-title">{adminPartyLabel("Party 1", request)}</h3>
         </div>
         <div className="field-grid">
           {party1Fields.map((field) => (
@@ -1514,7 +1545,7 @@ function AdminPartyFieldGroups({
       </section>
       <section className="party-field-group party-field-group-secondary">
         <div className="party-field-group-head">
-          <h3 className="admin-group-title">Party 2</h3>
+          <h3 className="admin-group-title">{adminPartyLabel("Party 2", request)}</h3>
         </div>
         <div className="field-grid">
           {party2Fields.map((field) => (

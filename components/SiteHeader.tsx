@@ -2,13 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { collection, limit, onSnapshot, query, where } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 import { navigation } from "@/lib/content";
+import { AccountModal } from "@/components/AccountModal";
 
 export function SiteHeader() {
   const [accountState, setAccountState] = useState<"loading" | "signed-in" | "signed-out">("loading");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [showStartRequest, setShowStartRequest] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const navRef = useRef<HTMLElement>(null);
 
@@ -34,12 +41,43 @@ export function SiteHeader() {
   useEffect(() => {
     if (!auth) {
       setAccountState("signed-out");
+      setShowStartRequest(true);
       return;
     }
-    return onAuthStateChanged(auth, (user) => {
+    let unsubscribeRequests: (() => void) | undefined;
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      unsubscribeRequests?.();
+      unsubscribeRequests = undefined;
       setAccountState(user ? "signed-in" : "signed-out");
+      setAccountEmail(user?.email || "");
+      setShowStartRequest(!user);
+      if (user && db) {
+        unsubscribeRequests = onSnapshot(
+          query(collection(db, "requests"), where("ownerUid", "==", user.uid), limit(1)),
+          (snapshot) => setShowStartRequest(snapshot.empty),
+          () => setShowStartRequest(false)
+        );
+      }
     });
+    return () => {
+      unsubscribeAuth();
+      unsubscribeRequests?.();
+    };
   }, []);
+
+  async function handleSignOut() {
+    if (!auth) return;
+    setIsSigningOut(true);
+    setSignOutError("");
+    try {
+      await signOut(auth);
+      setMenuOpen(false);
+    } catch {
+      setSignOutError("Unable to sign out. Please try again.");
+    } finally {
+      setIsSigningOut(false);
+    }
+  }
 
   return (
     <header className="topbar">
@@ -69,16 +107,39 @@ export function SiteHeader() {
           ))}
         </div>
         <div className="nav-actions">
-          <Link className="button primary" href="/qdro-request" onClick={() => setMenuOpen(false)}>
-            Start QDRO
-          </Link>
-          {accountState !== "loading" && (
-            <Link className="button secondary" href="/portal" onClick={() => setMenuOpen(false)}>
-              {accountState === "signed-in" ? "Client portal" : "Sign in"}
+          {showStartRequest && (
+            <Link className="button primary" href="/qdro-request" onClick={() => setMenuOpen(false)}>
+              Start QDRO
             </Link>
+          )}
+          {accountState === "signed-in" && (
+            <span className="nav-account-status" role="status">
+              Signed in
+              {accountEmail && (
+                <span className="nav-account-email" title={accountEmail}>{accountEmail}</span>
+              )}
+            </span>
+          )}
+          {accountState === "signed-in" && (
+            <Link className="button secondary" href="/portal" onClick={() => setMenuOpen(false)}>
+              Client portal
+            </Link>
+          )}
+          {accountState === "signed-out" && (
+            <button className="button secondary" type="button" aria-haspopup="dialog" onClick={() => {
+              setMenuOpen(false);
+              setAccountModalOpen(true);
+            }}>Sign in</button>
+          )}
+          {accountState === "signed-in" && (
+            <button className="button ghost" type="button" onClick={handleSignOut} disabled={isSigningOut}>
+              {isSigningOut ? "Signing out…" : "Sign out"}
+            </button>
           )}
         </div>
       </nav>
+      {signOutError && <p className="nav-account-error" role="alert">{signOutError}</p>}
+      {accountModalOpen && <AccountModal onClose={() => setAccountModalOpen(false)} />}
     </header>
   );
 }

@@ -1,12 +1,14 @@
 "use client";
 
+import { signInWithMigration } from "@/lib/client-sign-in";
+
 import dynamic from "next/dynamic";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  updateProfile,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
-  signInWithEmailAndPassword,
   type User
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
@@ -75,6 +77,7 @@ export function AiIntakeWizard() {
   const [clientUser, setClientUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(!auth);
   const [accountMode, setAccountMode] = useState<"create" | "sign-in">("create");
+  const [accountFullName, setAccountFullName] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
   const [accountPassword, setAccountPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -90,13 +93,13 @@ export function AiIntakeWizard() {
     }
     return onAuthStateChanged(auth, (currentUser) => {
       setCheckoutSecret("");
+      setIsDraftLoaded(false);
       setClientUser(currentUser);
       setAuthReady(true);
       if (currentUser?.email) {
         setAccountEmail(currentUser.email);
         setData((current) => current.party1_email ? current : { ...current, party1_email: currentUser.email || "" });
       } else {
-        window.localStorage.removeItem(storageKey);
         setAccountEmail("");
         setData({});
         setReady({});
@@ -112,12 +115,12 @@ export function AiIntakeWizard() {
   useEffect(() => {
     if (!authReady || isDraftLoaded) return;
 
-    const saved = window.localStorage.getItem(storageKey);
     if (!clientUser) {
-      window.localStorage.removeItem(storageKey);
       setIsDraftLoaded(true);
       return;
     }
+    const accountStorageKey = `${storageKey}:${clientUser.uid}`;
+    const saved = window.localStorage.getItem(accountStorageKey) || window.localStorage.getItem(storageKey);
 
     if (!saved) {
       setIsDraftLoaded(true);
@@ -142,7 +145,6 @@ export function AiIntakeWizard() {
         savedOwnerUid ? savedOwnerUid === clientUser.uid : savedOwnerEmail ? savedOwnerEmail === (clientUser.email || "") : false;
 
       if (!belongsToCurrentUser) {
-        window.localStorage.removeItem(storageKey);
         return;
       }
 
@@ -154,7 +156,7 @@ export function AiIntakeWizard() {
       setQuestionFieldIds(parsed.questionFieldIds || []);
       if (parsed.stage && parsed.stage !== "submitted") setStage(parsed.stage);
     } catch {
-      window.localStorage.removeItem(storageKey);
+      window.localStorage.removeItem(accountStorageKey);
     } finally {
       setIsDraftLoaded(true);
     }
@@ -162,23 +164,21 @@ export function AiIntakeWizard() {
 
   useEffect(() => {
     if (!isDraftLoaded || !clientUser) return;
-    const handle = window.setTimeout(() => {
-      window.localStorage.setItem(
-        storageKey,
-        JSON.stringify({
-          data,
-          ready,
-          uploadedFiles,
-          extraction,
-          questionFieldIds,
-          requestId,
-          stage,
-          ownerUid: clientUser.uid,
-          ownerEmail: clientUser.email || ""
-        })
-      );
-    }, 350);
-    return () => window.clearTimeout(handle);
+    window.localStorage.setItem(
+      `${storageKey}:${clientUser.uid}`,
+      JSON.stringify({
+        data,
+        ready,
+        uploadedFiles,
+        extraction,
+        questionFieldIds,
+        requestId,
+        stage,
+        ownerUid: clientUser.uid,
+        ownerEmail: clientUser.email || ""
+      })
+    );
+
   }, [clientUser, data, extraction, isDraftLoaded, questionFieldIds, ready, requestId, stage, uploadedFiles]);
 
   const readyComplete = readinessChecks.every((check) => ready[check.id]) && isIraScreeningComplete(data);
@@ -219,6 +219,11 @@ export function AiIntakeWizard() {
       return;
     }
 
+    if (accountMode === "create" && !accountFullName.trim()) {
+      setMessage("Please enter your full name.");
+      return;
+    }
+
     try {
       setIsWorking(true);
       if (accountMode === "create") {
@@ -226,13 +231,14 @@ export function AiIntakeWizard() {
         await setDoc(doc(db, "users", credential.user.uid), {
           uid: credential.user.uid,
           email: credential.user.email || accountEmail,
-          displayName: credential.user.email || accountEmail,
+          displayName: accountFullName.trim(),
           role: "client",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
+        await updateProfile(credential.user, { displayName: accountFullName.trim() });
       } else {
-        await signInWithEmailAndPassword(auth, accountEmail, accountPassword);
+        await signInWithMigration(auth, accountEmail, accountPassword);
       }
       setData((current) => current.party1_email ? current : { ...current, party1_email: accountEmail });
       setStage("uploads");
@@ -524,6 +530,8 @@ export function AiIntakeWizard() {
 
         {stage === "account" && (
           <AccountStep
+            accountFullName={accountFullName}
+            setAccountFullName={setAccountFullName}
             accountEmail={accountEmail}
             accountMode={accountMode}
             accountPassword={accountPassword}
@@ -699,6 +707,8 @@ function ReadinessStep({
 }
 
 function AccountStep({
+  accountFullName,
+  setAccountFullName,
   accountEmail,
   accountMode,
   accountPassword,
@@ -710,6 +720,8 @@ function AccountStep({
   setAccountMode,
   setAccountPassword
 }: {
+  accountFullName: string;
+  setAccountFullName: (value: string) => void;
   accountEmail: string;
   accountMode: "create" | "sign-in";
   accountPassword: string;
@@ -740,6 +752,14 @@ function AccountStep({
       <span className="status info">{accountMode === "create" ? "Create account" : "Sign in"}</span>
       <p>This is required before upload so the documents can be permanently stored with the request.</p>
       <div className="field-grid one">
+          {accountMode === "create" && (
+            <>
+              <div className="field">
+                <label htmlFor="ai-full-name">Full name</label>
+                <input className="input" id="ai-full-name" autoComplete="name" required value={accountFullName} onChange={(event) => setAccountFullName(event.target.value)} />
+              </div>
+            </>
+          )}
         <div className="field">
           <label htmlFor="ai-account-email">Email</label>
           <input className="input" id="ai-account-email" type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} />
@@ -750,7 +770,7 @@ function AccountStep({
         </div>
       </div>
       <div className="toolbar">
-        <button className="button primary" type="button" onClick={onSubmit} disabled={isWorking || !accountEmail || !accountPassword}>
+        <button className="button primary" type="button" onClick={onSubmit} disabled={isWorking || !accountEmail || !accountPassword || (accountMode === "create" && !accountFullName.trim())}>
           {isWorking ? "Working..." : accountMode === "create" ? "Create account and continue" : "Sign in and continue"}
         </button>
         <button

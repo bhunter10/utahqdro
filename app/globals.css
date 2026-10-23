@@ -96,6 +96,74 @@ textarea {
   gap: 10px;
 }
 
+.account-dialog {
+  width: min(520px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  color: var(--ink);
+  background: white;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 25%);
+}
+
+.account-dialog::backdrop {
+  background: rgb(16 24 40 / 55%);
+}
+
+.account-dialog-inner {
+  position: relative;
+  padding: 64px 24px 24px;
+}
+
+.account-dialog-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.account-modal-section h2 {
+  margin-top: 12px;
+  font-size: 28px;
+}
+
+.account-modal-section .lead {
+  font-size: 16px;
+}
+
+.account-modal-section .hero-panel {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.nav-account-status {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #344054;
+}
+
+.nav-account-error {
+  width: min(1160px, calc(100% - 32px));
+  margin: 0 auto 8px;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.nav-account-email {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 400;
+}
+
 .mobile-menu-toggle {
   display: none;
 }
@@ -2884,6 +2952,10 @@ th {
 }
 
 @media (max-width: 560px) {
+  .nav-account-email {
+    max-width: 90px;
+  }
+
   .nav {
     grid-template-columns: 44px minmax(40px, 1fr) auto;
     gap: 8px;
@@ -2896,6 +2968,10 @@ th {
 
   .nav-actions {
     gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 240px;
+    padding-block: 6px;
   }
 
   .nav-actions .button {

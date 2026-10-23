@@ -2,26 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  type User
-} from "firebase/auth";
-import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
+import { useRouter } from "next/navigation";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import type { QdroRequest } from "@/lib/types";
 import { formatLongDate } from "@/lib/field-format";
-import { auth, db, hasFirebaseConfig } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 
 export function PortalClient() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [mode, setMode] = useState<"sign-in" | "create">("sign-in");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [message, setMessage] = useState("");
 
   const [requestState, setRequestState] = useState<{
     uid: string;
@@ -49,103 +40,22 @@ export function PortalClient() {
   useEffect(() => {
     if (!auth) {
       setAuthReady(true);
+      router.replace("/sign-in");
       return;
     }
     return onAuthStateChanged(auth, (currentUser) => {
+      if (!currentUser) router.replace("/sign-in");
       setUser(currentUser);
       setAuthReady(true);
     });
-  }, []);
-
-  async function handleAuth() {
-    setMessage("");
-    if (!hasFirebaseConfig || !auth || !db) {
-      setMessage("Firebase is not configured in this environment yet.");
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      if (mode === "create") {
-        const credential = await createUserWithEmailAndPassword(auth, email, password);
-        await setDoc(doc(db, "users", credential.user.uid), {
-          uid: credential.user.uid,
-          email: credential.user.email || email,
-          displayName: credential.user.email || email,
-          role: "client",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-    } catch (error) {
-      setMessage(getPortalAuthMessage(error, mode));
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+  }, [router]);
 
   if (!authReady) {
     return <main className="page" aria-busy="true"><p role="status">Loading your account…</p></main>;
   }
 
   if (!user) {
-    return (
-      <main className="page">
-        <section className="hero">
-          <div>
-            <div className="eyebrow">Client portal</div>
-            <h1>Sign in to resume your QDRO or check status.</h1>
-            <p className="lead">
-              Use your client account to view request status, files, notes,
-              payment state, and signature progress.
-            </p>
-          </div>
-          <form className="hero-panel">
-            <span className="status info">{mode === "sign-in" ? "Client sign in" : "Create account"}</span>
-            <div className="field-grid one">
-              <div className="field">
-                <label htmlFor="email">Email</label>
-                <input className="input" id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-              </div>
-              <div className="field">
-                <label htmlFor="password">Password</label>
-                <input
-                  className="input"
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              </div>
-            </div>
-            <div className="toolbar">
-              <button className="button primary full" type="button" onClick={handleAuth} disabled={isSubmitting || !email || !password}>
-                {isSubmitting ? "Working..." : mode === "sign-in" ? "Sign in" : "Create account"}
-              </button>
-            </div>
-            {message && <p style={{ color: "var(--danger)" }}>{message}</p>}
-            <p>
-              {mode === "sign-in" ? "New here?" : "Already have an account?"}{" "}
-              <button
-                className="button ghost"
-                type="button"
-                onClick={() => {
-                  setMode((current) => (current === "sign-in" ? "create" : "sign-in"));
-                  setMessage("");
-                }}
-              >
-                {mode === "sign-in" ? "Create an account" : "Sign in"}
-              </button>
-            </p>
-            <p>
-              Ready to begin? <Link className="muted-link" href="/qdro-request">Start your QDRO request</Link>.
-            </p>
-          </form>
-        </section>
-      </main>
-    );
+    return <main className="page" aria-busy="true"><p role="status">Opening sign in…</p></main>;
   }
 
   return (
@@ -155,17 +65,11 @@ export function PortalClient() {
           <div>
             <div className="eyebrow">Client portal</div>
             <h1>Your QDRO request</h1>
-            <p className="lead">
-              Signed in as {user.email}.
-            </p>
           </div>
           <div className="nav-actions">
             <Link className="button primary" href="/qdro-request">
               Start another QDRO request
             </Link>
-            <button className="button ghost" type="button" onClick={() => auth && signOut(auth)}>
-              Sign out
-            </button>
           </div>
         </div>
 
@@ -243,30 +147,4 @@ export function PortalClient() {
       </section>
     </main>
   );
-}
-
-function getPortalAuthMessage(error: unknown, mode: "sign-in" | "create") {
-  const message = error instanceof Error ? error.message : "";
-
-  if (message.includes("auth/invalid-credential") || message.includes("auth/user-not-found") || message.includes("auth/wrong-password")) {
-    return "We couldn't find an account with that email and password. Please check both and try again, or create an account if this is your first time here.";
-  }
-
-  if (message.includes("auth/email-already-in-use")) {
-    return "An account already exists for that email. Please sign in instead.";
-  }
-
-  if (message.includes("auth/weak-password")) {
-    return "Please choose a stronger password. It should be at least 6 characters.";
-  }
-
-  if (message.includes("auth/invalid-email")) {
-    return "Please enter a valid email address.";
-  }
-
-  if (message.includes("auth/too-many-requests")) {
-    return "Too many attempts were made. Please wait a few minutes and try again.";
-  }
-
-  return mode === "create" ? "Unable to create your account. Please try again." : "Unable to sign in. Please try again.";
 }

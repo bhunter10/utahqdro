@@ -358,6 +358,13 @@ export const intakeSteps: IntakeStep[] = [
         options: ["Party 1 (First person named in your case)", "Party 2 (Second person named in your case)"]
       },
       {
+        id: "account_awardee",
+        label: "Retirement account recipient",
+        type: "radio",
+        required: true,
+        options: ["Party 1 (First person named in your case)", "Party 2 (Second person named in your case)"]
+      },
+      {
         id: "formal_plan_name",
         label: "What is the formal name of the plan we are dividing?",
         type: "text",
@@ -402,13 +409,6 @@ export const intakeSteps: IntakeStep[] = [
         fullWidth: true,
         constrained: true,
         help: "Often the divorce date unless your decree says something different."
-      },
-      {
-        id: "account_awardee",
-        label: "Which party is being awarded some or all of this retirement account?",
-        type: "radio",
-        required: true,
-        options: ["Party 1 (First person named in your case)", "Party 2 (Second person named in your case)"]
       },
       {
         id: "market_adjustment",
